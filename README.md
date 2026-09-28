@@ -8,14 +8,17 @@ Persian Empire), and the **Vikings**.
 ## Play now (Windows, no Godot needed)
 
 Don't want to install Godot or open an editor at all? Grab the standalone
-build from the repository's **[Releases page](https://github.com/Golden-King05/RTSspoof/releases)**
-— it's a single `RTSspoof.exe`, just double-click it. No installer, no
-launcher, no Godot required.
+build straight from the repo:
+**[releases/latest/RTSspoof.exe](releases/latest/RTSspoof.exe)** — download
+it and double-click it. No installer, no launcher, no Godot required.
+(It's committed directly to the repo rather than published as a GitHub
+Release — see the note in "Publishing a new Windows build" below.)
 
-The game opens straight to a main menu (Play / Quit) and checks GitHub for
-a newer release on startup. If one's out, a **Download Update** button
-appears — clicking it downloads the new build and relaunches automatically,
-so you never have to manually re-download the exe yourself.
+The game opens straight to a main menu (Play / Quit) and checks
+`releases/latest/VERSION` in this repo for a newer build on startup. If
+one's out, a **Download Update** button appears — clicking it downloads the
+new exe and relaunches automatically, so you never have to manually
+re-download it yourself.
 
 ## Installing & updating (from source, for development)
 
@@ -114,22 +117,36 @@ ui/                     -- main menu (with self-updater), HUD and civ-select scr
 
 ## Publishing a new Windows build
 
-The main menu's self-updater (`ui/MainMenu.gd`) checks
-`api.github.com/repos/.../releases/latest` and offers to download whatever
-`.exe` asset is attached there. To ship an update:
+Builds are published by committing them straight into the repo under
+`releases/latest/`, **not** as a GitHub Release -- there's no CI/automation
+with permission to create Releases or upload their assets here, so a plain
+git commit is the reliable path. The main menu's self-updater
+(`ui/MainMenu.gd`) checks two fixed raw-file URLs pointed at that folder:
+`releases/latest/VERSION` (a one-line version string) and
+`releases/latest/RTSspoof.exe`. To ship an update:
 
-1. Bump `CURRENT_VERSION` in `ui/MainMenu.gd` (e.g. `"v1.0.1"`) and commit it.
+1. Bump `CURRENT_VERSION` in `ui/MainMenu.gd` (e.g. `"v1.0.1"`).
 2. Export a release build: `godot --headless --path . --export-release
    "Windows Desktop" build/windows/RTSspoof.exe` (requires Godot's export
    templates for this exact editor version to be installed first, via the
    editor's **Editor → Manage Export Templates**, or downloaded from
    [the matching GitHub release](https://github.com/godotengine/godot/releases)).
-3. On GitHub, create a new Release tagged with that exact same version
-   (e.g. `v1.0.1`) and attach `RTSspoof.exe` as a release asset.
-4. Any older copy of the game will now offer that update the next time it's
-   opened. `export_presets.cfg` and `build/` outputs aren't meant to be
-   committed to the repo (see `.gitignore`) -- only the source and the
-   Release asset matter.
+3. Overwrite `releases/latest/RTSspoof.exe` with the new build and
+   `releases/latest/VERSION` with the same string you set in step 1
+   (no `v`-prefix mismatch -- it's a literal string compare).
+4. Commit and push both files (plus the `CURRENT_VERSION` change) together.
+   Any older copy of the game will now offer that update the next time it's
+   opened.
+
+Note this means `releases/latest/RTSspoof.exe` is a binary that gets
+replaced (not diffed) on every update, so the repo's git history grows by
+roughly one exe's size per release -- an accepted tradeoff here in exchange
+for not needing Release-publishing permissions. If that ever becomes a
+problem, `ui/MainMenu.gd`'s `VERSION_CHECK_URL`/`EXE_DOWNLOAD_URL` constants
+are the only things that would need to change to point at a real GitHub
+Release instead. `export_presets.cfg` is committed (it's just config);
+`build/` output is not (see `.gitignore`) -- only `releases/latest/` is the
+actual published artifact.
 
 ## Headless / automated testing
 

@@ -1,17 +1,21 @@
 extends CanvasLayer
 class_name MainMenu
-## The very first screen: Play / Quit, plus a self-updater that checks
-## GitHub Releases for a newer build and, in an exported Windows build,
-## downloads and installs it without the player needing a separate
-## launcher or the Godot editor.
+## The very first screen: Play / Quit, plus a self-updater. There's no
+## GitHub Release for this project (publishing one requires API/web-UI
+## access this app doesn't have), so instead it checks a plain VERSION
+## file committed straight to the repo and, in an exported Windows build,
+## downloads and installs the matching exe next to it -- no separate
+## launcher or Godot editor needed.
 
 signal play_pressed
 
-## Bump this (and tag a matching GitHub Release, e.g. "v1.0.1") whenever a
-## new build is published, so running copies can tell they're out of date.
+## Bump this (and push a matching releases/latest/VERSION + RTSspoof.exe,
+## see the README's "Publishing a new Windows build" section) whenever a
+## new build goes out, so running copies can tell they're out of date.
 const CURRENT_VERSION := "v1.0.0"
-const GITHUB_REPO := "Golden-King05/RTSspoof"
-const API_LATEST_RELEASE_URL := "https://api.github.com/repos/%s/releases/latest" % GITHUB_REPO
+const RAW_BASE := "https://raw.githubusercontent.com/Golden-King05/RTSspoof/claude/rts-aoe2-clone-game-8k7moo/releases/latest"
+const VERSION_CHECK_URL := RAW_BASE + "/VERSION"
+const EXE_DOWNLOAD_URL := RAW_BASE + "/RTSspoof.exe"
 const UPDATE_HELPER_NAME := "_rtsspoof_apply_update.bat"
 const DOWNLOADED_EXE_NAME := "_rtsspoof_update_download.exe"
 
@@ -21,7 +25,6 @@ var _play_button: Button
 
 var _check_http: HTTPRequest
 var _download_http: HTTPRequest
-var _download_url: String = ""
 var _latest_tag: String = ""
 var _is_editor_run: bool = false
 
@@ -108,7 +111,10 @@ func _ready() -> void:
 
 
 func _check_for_updates() -> void:
-	var err: int = _check_http.request(API_LATEST_RELEASE_URL, ["User-Agent: RTSspoof-Game"])
+	# Raw file URLs get cached aggressively by GitHub's CDN; a cache-busting
+	# query param keeps this check honest.
+	var url: String = VERSION_CHECK_URL + "?t=%d" % Time.get_unix_time_from_system()
+	var err: int = _check_http.request(url)
 	if err != OK:
 		_status_label.text = "Version %s -- couldn't reach GitHub to check for updates." % CURRENT_VERSION
 
@@ -118,25 +124,9 @@ func _on_release_checked(result: int, response_code: int, _headers: PackedString
 		_status_label.text = "Version %s (up to date check failed)" % CURRENT_VERSION
 		return
 
-	var parsed = JSON.parse_string(body.get_string_from_utf8())
-	if typeof(parsed) != TYPE_DICTIONARY:
-		_status_label.text = "Version %s" % CURRENT_VERSION
-		return
-
-	_latest_tag = str(parsed.get("tag_name", ""))
+	_latest_tag = body.get_string_from_utf8().strip_edges()
 	if _latest_tag == "" or _latest_tag == CURRENT_VERSION:
 		_status_label.text = "Version %s (up to date)" % CURRENT_VERSION
-		return
-
-	_download_url = ""
-	for asset in parsed.get("assets", []):
-		var asset_name: String = str(asset.get("name", ""))
-		if asset_name.to_lower().ends_with(".exe"):
-			_download_url = str(asset.get("browser_download_url", ""))
-			break
-
-	if _download_url == "":
-		_status_label.text = "Version %s -- update %s is out, but has no Windows build to download." % [CURRENT_VERSION, _latest_tag]
 		return
 
 	if _is_editor_run:
@@ -155,7 +145,8 @@ func _on_update_pressed() -> void:
 	var download_path: String = exe_dir.path_join(DOWNLOADED_EXE_NAME)
 	_download_http.download_file = download_path
 
-	var err: int = _download_http.request(_download_url)
+	var url: String = EXE_DOWNLOAD_URL + "?t=%d" % Time.get_unix_time_from_system()
+	var err: int = _download_http.request(url)
 	if err != OK:
 		_status_label.text = "Update download failed to start."
 		_update_button.disabled = false
