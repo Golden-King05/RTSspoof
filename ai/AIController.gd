@@ -63,13 +63,19 @@ func _reserve(reserved: Dictionary, cost: Dictionary) -> void:
 		reserved[res_type] = reserved.get(res_type, 0.0) + float(cost[res_type])
 
 
-## Villager count the AI aims to keep training. Raid civs lean on combat
-## income instead of a big workforce, so they can run leaner.
+## Villager count the AI aims to keep training. This deliberately has no
+## hard ceiling: it reserves a fraction of population capacity for an army
+## and puts the rest toward the workforce, so the villager (and therefore
+## farm -- see _maybe_build_farm) count keeps growing right along with
+## population cap instead of plateauing early. That matters most late game,
+## once wild resources are picked over and farms carry most of the food
+## income. Raid civs reserve a bigger army share since their income doesn't
+## depend on a large workforce.
 func _target_villagers(ps: PlayerState) -> int:
 	var civ: Dictionary = ps.civ_data()
-	if not civ.get("raid_bonus", {}).is_empty():
-		return 6
-	return 8
+	var military_share: float = 0.35 if not civ.get("raid_bonus", {}).is_empty() else 0.2
+	var military_reserve: int = max(4, int(ps.population_cap * military_share))
+	return max(4, ps.population_cap - military_reserve)
 
 
 ## How large an idle army has to get before the AI commits it to an attack.
@@ -145,10 +151,12 @@ func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-## Keeps roughly one Farm per four villagers so food income scales with the
-## workforce. Placement is biased toward a lake shore when this civ actually
-## benefits from that (the Egyptian water bonus) -- otherwise it's just a
-## normal spot near the Town Center, same as a House or Barracks.
+## Keeps roughly one Farm per four villagers, with no upper limit -- as the
+## workforce grows (see _target_villagers), so does the farm count, which is
+## what keeps food income scaling into the late game once wild resources
+## are picked clean. Placement is biased toward a lake shore when this civ
+## actually benefits from that (the Egyptian water bonus) -- otherwise it's
+## just a normal spot near the Town Center, same as a House or Barracks.
 func _maybe_build_farm(ps: PlayerState, reserved: Dictionary) -> void:
 	var farm_count := 0
 	var villager_count := 0
