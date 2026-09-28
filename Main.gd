@@ -1,0 +1,214 @@
+extends Node2D
+## Wires up the whole match: world, camera, UI, civ pick, starting bases,
+## resources and the AI opponent. Everything is built procedurally so there
+## are no hand-authored sub-scenes to keep in sync.
+
+const MAP_SIZE := Vector2(3000, 3000)
+const HUMAN_START := Vector2(320, 320)
+
+var world: Node2D
+var camera: RTSCamera
+var selection_manager: SelectionManager
+var hud: HUD
+var fog: FogOfWar
+var ai_controller: AIController
+var civ_select: CivSelectScreen
+
+# Debug/automation hooks, e.g.: godot --path . -- --autostart=egyptian --screenshot=out.png --quit-after-seconds=5
+var _screenshot_path: String = ""
+var _quit_after_seconds: float = -1.0
+var _elapsed: float = 0.0
+var _debug_log: bool = false
+var _debug_log_timer: float = 0.0
+
+
+func _ready() -> void:
+	randomize()
+
+	world = Node2D.new()
+	world.name = "World"
+	add_child(world)
+
+	var ground := Ground.new()
+	ground.setup(MAP_SIZE)
+	world.add_child(ground)
+
+	var nav_region := NavigationRegion2D.new()
+	var nav_poly := NavigationPolygon.new()
+	nav_poly.vertices = PackedVector2Array([
+		Vector2.ZERO, Vector2(MAP_SIZE.x, 0), Vector2(MAP_SIZE.x, MAP_SIZE.y), Vector2(0, MAP_SIZE.y)
+	])
+	nav_poly.add_polygon(PackedInt32Array([0, 1, 2, 3]))
+	nav_region.navigation_polygon = nav_poly
+	world.add_child(nav_region)
+
+	camera = RTSCamera.new()
+	camera.map_bounds = Rect2(Vector2.ZERO, MAP_SIZE)
+	camera.zoom = Vector2(1.0, 1.0)
+	add_child(camera)
+	camera.global_position = HUMAN_START
+	camera.make_current()
+
+	var ui_layer := CanvasLayer.new()
+	ui_layer.layer = 10
+	add_child(ui_layer)
+	selection_manager = SelectionManager.new()
+	selection_manager.world_root = world
+	ui_layer.add_child(selection_manager)
+
+	hud = HUD.new()
+	add_child(hud)
+
+	civ_select = CivSelectScreen.new()
+	add_child(civ_select)
+	civ_select.civ_chosen.connect(_on_civ_chosen)
+
+	_parse_debug_args()
+
+
+func _parse_debug_args() -> void:
+	for a in OS.get_cmdline_user_args():
+		if a.begins_with("--autostart="):
+			call_deferred("_on_civ_chosen", a.substr(len("--autostart=")))
+		elif a.begins_with("--screenshot="):
+			_screenshot_path = a.substr(len("--screenshot="))
+		elif a.begins_with("--quit-after-seconds="):
+			_quit_after_seconds = float(a.substr(len("--quit-after-seconds=")))
+		elif a.begins_with("--camera="):
+			var parts: PackedStringArray = a.substr(len("--camera=")).split(",")
+			if parts.size() == 2:
+				call_deferred("_set_debug_camera", Vector2(float(parts[0]), float(parts[1])))
+		elif a == "--debuglog":
+			_debug_log = true
+		elif a == "--simulate":
+			call_deferred("_run_simulation")
+
+
+func _set_debug_camera(pos: Vector2) -> void:
+	camera.global_position = pos
+
+
+## Exercises the real human-input code paths (box select, right-click order,
+## building placement) without needing actual OS input events, so this can
+## be checked headlessly. Only runs when --simulate is passed.
+func _run_simulation() -> void:
+	await get_tree().create_timer(1.0).timeout
+	var ps: PlayerState = GameManager.get_player(GameManager.HUMAN_ID)
+	print("[sim] selecting all human villagers")
+	selection_manager._set_selected_units(ps.units.duplicate())
+	selection_manager.selection_changed.emit()
+	print("[sim] selected count=", selection_manager.selected_units.size())
+
+	await get_tree().create_timer(0.5).timeout
+	var res_node = null
+	for r in get_tree().get_nodes_in_group("resources"):
+		if is_instance_valid(r):
+			res_node = r
+			break
+	if res_node:
+		print("[sim] right-click ordering gather on a ", res_node.resource_type, " node")
+		selection_manager._handle_right_click(res_node.global_position)
+	else:
+		print("[sim] no resource node found!")
+
+	await get_tree().create_timer(1.0).timeout
+	print("[sim] unit states after gather order: ", ps.units.map(func(u): return u.state if is_instance_valid(u) else -1))
+
+	await get_tree().create_timer(1.0).timeout
+	print("[sim] placing a house")
+	selection_manager.start_placement("house")
+	var tc = ps.town_center()
+	var place_pos: Vector2 = tc.global_position + Vector2(150, 150)
+	selection_manager._ghost.global_position = place_pos
+	selection_manager._ghost.valid = true
+	selection_manager._try_place_building()
+	print("[sim] buildings now=", ps.buildings.size(), " wood=", ps.resources.wood)
+
+	await get_tree().create_timer(4.0).timeout
+	for b in ps.buildings:
+		if is_instance_valid(b):
+			print("[sim] building=", b.building_type, " hp=", b.hp, "/", b.max_hp, " under_construction=", b.under_construction)
+	print("[sim] final unit count=", ps.units.size(), " DONE")
+
+
+func _process(delta: float) -> void:
+	if _debug_log and GameManager.match_started:
+		_debug_log_timer += delta
+		if _debug_log_timer >= 3.0:
+			_debug_log_timer = 0.0
+			for p in GameManager.players:
+				print("[t=%.0f] P%d(%s) res=%s pop=%d/%d units=%d buildings=%d" % [
+					_elapsed, p.player_id, p.civ_id, p.resources, p.population_used, p.population_cap,
+					p.units.size(), p.buildings.size()
+				])
+	if _quit_after_seconds > 0.0:
+		_elapsed += delta
+		if _elapsed >= _quit_after_seconds:
+			if _screenshot_path != "":
+				var img: Image = get_viewport().get_texture().get_image()
+				img.save_png(_screenshot_path)
+			get_tree().quit()
+
+
+func _on_civ_chosen(human_civ: String) -> void:
+	civ_select.queue_free()
+	GameManager.start_match(human_civ)
+
+	fog = FogOfWar.new()
+	fog.setup(MAP_SIZE, GameManager.HUMAN_ID)
+	world.add_child(fog)
+
+	_scatter_resources()
+	_spawn_start_base(GameManager.HUMAN_ID, HUMAN_START)
+	_spawn_start_base(GameManager.AI_ID, MAP_SIZE - HUMAN_START)
+
+	camera.global_position = HUMAN_START
+
+	hud.setup(selection_manager, GameManager.HUMAN_ID)
+
+	ai_controller = AIController.new()
+	ai_controller.setup(world, GameManager.AI_ID)
+	add_child(ai_controller)
+
+
+func _spawn_start_base(player_id: int, pos: Vector2) -> void:
+	var tc := RTSBuilding.new()
+	world.add_child(tc)
+	tc.global_position = pos
+	tc.setup("town_center", player_id, false)
+
+	for i in range(3):
+		var v := RTSUnit.new()
+		world.add_child(v)
+		var ang: float = TAU * float(i) / 3.0
+		v.global_position = pos + Vector2(cos(ang), sin(ang)) * 70.0
+		v.setup("villager", player_id)
+
+
+func _scatter_resources() -> void:
+	_place_cluster("tree", 6, HUMAN_START + Vector2(140, -220), 90.0)
+	_place_cluster("tree", 6, (MAP_SIZE - HUMAN_START) + Vector2(-140, 220), 90.0)
+
+	_place_cluster("gold_mine", 2, HUMAN_START + Vector2(220, 160), 50.0)
+	_place_cluster("gold_mine", 2, (MAP_SIZE - HUMAN_START) + Vector2(-220, -160), 50.0)
+
+	_place_cluster("stone_mine", 2, HUMAN_START + Vector2(-40, 220), 50.0)
+	_place_cluster("stone_mine", 2, (MAP_SIZE - HUMAN_START) + Vector2(40, -220), 50.0)
+
+	_place_cluster("berry_bush", 3, HUMAN_START + Vector2(200, 20), 60.0)
+	_place_cluster("berry_bush", 3, (MAP_SIZE - HUMAN_START) + Vector2(-200, -20), 60.0)
+
+	var mid: Vector2 = MAP_SIZE / 2.0
+	_place_cluster("tree", 10, mid, 260.0)
+	_place_cluster("gold_mine", 3, mid + Vector2(180, -120), 100.0)
+	_place_cluster("stone_mine", 3, mid + Vector2(-180, 120), 100.0)
+
+
+func _place_cluster(type_id: String, count: int, center: Vector2, spread: float) -> void:
+	for i in range(count):
+		var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
+		var pos: Vector2 = (center + offset).clamp(Vector2(60, 60), MAP_SIZE - Vector2(60, 60))
+		var node := RTSResourceNode.new()
+		world.add_child(node)
+		node.global_position = pos
+		node.setup(type_id)
