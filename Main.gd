@@ -20,6 +20,7 @@ var _quit_after_seconds: float = -1.0
 var _elapsed: float = 0.0
 var _debug_log: bool = false
 var _debug_log_timer: float = 0.0
+var _forced_ai_civ: String = ""
 
 
 func _ready() -> void:
@@ -88,6 +89,8 @@ func _parse_debug_args() -> void:
 				call_deferred("_set_debug_camera", Vector2(float(parts[0]), float(parts[1])))
 		elif a == "--debuglog":
 			_debug_log = true
+		elif a.begins_with("--ai-civ="):
+			_forced_ai_civ = a.substr(len("--ai-civ="))
 		elif a == "--simulate":
 			call_deferred("_run_simulation")
 
@@ -187,9 +190,16 @@ func _process(delta: float) -> void:
 		if _debug_log_timer >= 3.0:
 			_debug_log_timer = 0.0
 			for p in GameManager.players:
-				print("[t=%.0f] P%d(%s) res=%s pop=%d/%d units=%d buildings=%d" % [
+				var building_types: Array = []
+				for b in p.buildings:
+					if is_instance_valid(b):
+						var note: String = ""
+						if b.building_type == "farm":
+							note = "@water" if GameManager.is_near_water(b.global_position) else "@land"
+						building_types.append(b.building_type + note)
+				print("[t=%.0f] P%d(%s) res=%s pop=%d/%d units=%d buildings=%s" % [
 					_elapsed, p.player_id, p.civ_id, p.resources, p.population_used, p.population_cap,
-					p.units.size(), p.buildings.size()
+					p.units.size(), building_types
 				])
 	if _quit_after_seconds > 0.0:
 		_elapsed += delta
@@ -202,7 +212,7 @@ func _process(delta: float) -> void:
 
 func _on_civ_chosen(human_civ: String) -> void:
 	civ_select.queue_free()
-	GameManager.start_match(human_civ)
+	GameManager.start_match(human_civ, _forced_ai_civ)
 
 	fog = FogOfWar.new()
 	fog.setup(MAP_SIZE, GameManager.HUMAN_ID)

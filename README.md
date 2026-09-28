@@ -63,8 +63,16 @@ best raiders since they cross that threshold quickest.
 - Melee/ranged combat with HP, armor and attack cooldowns.
 - Grid-based fog of war (unexplored / explored / visible) for the human
   player.
-- A basic scripted AI opponent that gathers, expands, builds a barracks,
-  trains an army and attack-moves once strong enough.
+- A scripted AI opponent that gathers, expands, builds farms/houses/a
+  barracks, trains an army and attack-moves once strong enough. It reads
+  its own civ's bonuses to adapt: it builds Farms near a lake shore when
+  playing Egyptians (to actually earn the water bonus), raids in smaller
+  and more frequent parties when playing Vikings, and commits its army a
+  bit sooner when playing a faster-moving civ like the Achaemenids. It
+  also prioritizes economic buildings over discretionary army training --
+  it won't blow its stockpile on a unit the moment it can afford one if a
+  Farm or House is still unfunded, so it actually saves up for big-ticket
+  items instead of spending everything as it comes in.
 
 This is a vertical-slice prototype, not a full game: no tech tree, ages,
 or campaign.
@@ -91,8 +99,10 @@ godot --path . -- --autostart=egyptian --debuglog --quit-after-seconds=60
 godot --path . -- --autostart=british --simulate --screenshot=out.png --quit-after-seconds=10
 ```
 
-- `--autostart=<egyptian|british>` skips the civ-select screen.
-- `--debuglog` prints both players' resources/population/army every 3s.
+- `--autostart=<civ>` skips the civ-select screen and starts as that civ.
+- `--ai-civ=<civ>` forces the AI opponent's civ instead of a random pick
+  (handy for testing one civ's AI behavior deterministically).
+- `--debuglog` prints both players' resources/population/buildings every 3s.
 - `--simulate` exercises selection/orders/building placement automatically.
 - `--screenshot=<path>` saves a PNG when the run ends.
 - `--quit-after-seconds=<n>` ends the run after n seconds.
