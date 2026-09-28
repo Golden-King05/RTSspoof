@@ -1,8 +1,9 @@
 # RTSspoof
 
 A small Age of Empires II–inspired real-time strategy prototype built in
-Godot 4 (GDScript), featuring two playable civilizations: the **Egyptians**
-and the **British**.
+Godot 4 (GDScript), featuring three playable civilizations: the
+**Egyptians**, the **British**, and the **Achaemenids** (Cyrus the Great's
+Persian Empire).
 
 ## Requirements
 
@@ -13,8 +14,8 @@ and the **British**.
 
 1. Open Godot, choose "Import", and select `project.godot` in this folder.
 2. Press **Run** (F5). The game opens on a civilization-select screen.
-3. Pick Egyptians or British to start a 1v1 match against a scripted AI
-   opponent playing the other civilization.
+3. Pick a civilization to start a 1v1 match against a scripted AI opponent
+   randomly playing one of the other two.
 
 ## Controls
 
@@ -38,6 +39,7 @@ and the **British**.
 |---|---|---|
 | Egyptians | Villagers gather Food 20% faster from farms/bushes built near water; start with +50 Gold | War Chariot (fast melee) |
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
+| Achaemenids | All units move 15% faster; start with +100 Gold | Immortal (elite heavy infantry) |
 
 Lakes are scattered around the map (one near each base, one contested in
 the middle) — they're impassable, and any food source (a placed Farm or a

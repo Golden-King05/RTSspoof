@@ -104,6 +104,11 @@ func range_multiplier() -> float:
 	return civ.get("ranged_range_bonus", 1.0)
 
 
+func move_speed_multiplier() -> float:
+	var civ: Dictionary = civ_data()
+	return civ.get("move_speed_bonus", 1.0)
+
+
 func town_center() -> Node:
 	for b in buildings:
 		if is_instance_valid(b) and b.building_type == "town_center" and not b.under_construction:

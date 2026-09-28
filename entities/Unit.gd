@@ -69,6 +69,8 @@ func setup(p_unit_type: String, p_player_id: int) -> void:
 	can_gather_flag = stats.get("can_gather", false)
 	if is_ranged and ps:
 		attack_range *= ps.range_multiplier()
+	if ps:
+		move_speed *= ps.move_speed_multiplier()
 
 	add_to_group("units")
 	add_to_group("player_%d_units" % player_id)

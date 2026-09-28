@@ -1,6 +1,6 @@
 extends CanvasLayer
 class_name CivSelectScreen
-## Pre-match screen: pick Egyptians or British.
+## Pre-match screen: pick a civilization from GameData.CIV_DATA.
 
 signal civ_chosen(civ_id: String)
 
@@ -20,8 +20,8 @@ func _ready() -> void:
 	vbox.anchor_bottom = 0.5
 	vbox.offset_left = -230
 	vbox.offset_right = 230
-	vbox.offset_top = -160
-	vbox.offset_bottom = 160
+	vbox.offset_top = -230
+	vbox.offset_bottom = 230
 	vbox.add_theme_constant_override("separation", 14)
 	add_child(vbox)
 

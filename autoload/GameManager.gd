@@ -20,7 +20,7 @@ signal game_ended(winner_id: int)
 
 
 func start_match(human_civ: String) -> void:
-	var ai_civ: String = GameData.other_civ(human_civ)
+	var ai_civ: String = GameData.random_other_civ(human_civ)
 	players = []
 	players.append(PlayerState.new(HUMAN_ID, human_civ, false))
 	players.append(PlayerState.new(AI_ID, ai_civ, true))

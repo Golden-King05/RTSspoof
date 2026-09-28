@@ -60,6 +60,15 @@ const UNIT_STATS := {
 		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "british",
 		"can_build": false, "can_gather": false,
 	},
+	"immortal": {
+		"display_name": "Immortal",
+		"max_hp": 60, "attack": 9, "armor": 2, "attack_range": 16.0,
+		"move_speed": 100.0, "attack_cooldown": 1.1, "is_ranged": false,
+		"cost": {"food": 70, "gold": 35}, "train_time": 24.0, "pop_cost": 1,
+		"radius": 11.0, "vision_range": 160.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "achaemenid",
+		"can_build": false, "can_gather": false,
+	},
 }
 
 ## Building stat table.
@@ -116,6 +125,18 @@ const CIV_DATA := {
 		"barracks_unique": true,
 		"bonus_text": "Houses support +5 extra Population. Archers fire 20% farther. Unique Unit: Longbowman.",
 	},
+	"achaemenid": {
+		"display_name": "Achaemenids",
+		"color": Color(0.55, 0.20, 0.60),
+		"gather_bonus": {},
+		"starting_bonus": {"gold": 100},
+		"house_pop_bonus": 0,
+		"ranged_range_bonus": 1.0,
+		"move_speed_bonus": 1.15,
+		"unique_unit": "immortal",
+		"barracks_unique": true,
+		"bonus_text": "All units move 15% faster. Start with +100 Gold. Unique Unit: Immortal.",
+	},
 }
 
 const RESOURCE_NODE_STATS := {
@@ -150,11 +171,16 @@ static func get_civ_data(civ_id: String) -> Dictionary:
 	return CIV_DATA.get(civ_id, {})
 
 
-static func other_civ(civ_id: String) -> String:
+## Picks a random civ other than `civ_id`, for pairing the AI opponent
+## against the human's chosen civ (works regardless of how many are added).
+static func random_other_civ(civ_id: String) -> String:
+	var others: Array = []
 	for id in CIV_DATA.keys():
 		if id != civ_id:
-			return id
-	return civ_id
+			others.append(id)
+	if others.is_empty():
+		return civ_id
+	return others[randi() % others.size()]
 
 
 static func unit_available_for_civ(unit_type: String, civ_id: String) -> bool:
