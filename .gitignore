@@ -1,6 +1,9 @@
 # Godot 4+ specific ignores
 .godot/
 
+# Exported builds -- published as GitHub Release assets instead of committed
+build/
+
 # OS/editor cruft
 .DS_Store
 *.tmp

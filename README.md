@@ -5,7 +5,21 @@ Godot 4 (GDScript), featuring four playable civilizations: the
 **Egyptians**, the **British**, the **Achaemenids** (Cyrus the Great's
 Persian Empire), and the **Vikings**.
 
-## Installing & updating
+## Play now (Windows, no Godot needed)
+
+Don't want to install Godot or open an editor at all? Grab the standalone
+build from the repository's **[Releases page](https://github.com/Golden-King05/RTSspoof/releases)**
+— it's a single `RTSspoof.exe`, just double-click it. No installer, no
+launcher, no Godot required.
+
+The game opens straight to a main menu (Play / Quit) and checks GitHub for
+a newer release on startup. If one's out, a **Download Update** button
+appears — clicking it downloads the new build and relaunches automatically,
+so you never have to manually re-download the exe yourself.
+
+## Installing & updating (from source, for development)
+
+Want to look at or change the code? You'll need Godot itself.
 
 New here? **[See INSTALL.md](INSTALL.md)** for a full step-by-step guide
 (installing Godot itself, downloading the project, opening and running it —
@@ -21,7 +35,8 @@ The short version, if you've done this kind of thing before:
 2. Download or clone this repository.
 3. In Godot, choose **Import**, select `project.godot` from this folder,
    then **Import & Edit**.
-4. Press **Run** (F5). The game opens on a civilization-select screen.
+4. Press **Run** (F5). The game opens on a main menu; click **Play** to
+   reach the civilization-select screen.
 5. Pick a civilization to start a 1v1 match against a scripted AI opponent
    randomly playing one of the other three.
 
@@ -94,8 +109,27 @@ autoload/              -- GameData (unit/building/civ stat tables), GameManager 
 core/                  -- camera, selection/input, fog of war, ground, player economy, placement ghost
 entities/               -- Unit, Building, ResourceNode (generic, data-driven by GameData)
 ai/                     -- scripted AI opponent
-ui/                     -- HUD and civ-select screen
+ui/                     -- main menu (with self-updater), HUD and civ-select screen
 ```
+
+## Publishing a new Windows build
+
+The main menu's self-updater (`ui/MainMenu.gd`) checks
+`api.github.com/repos/.../releases/latest` and offers to download whatever
+`.exe` asset is attached there. To ship an update:
+
+1. Bump `CURRENT_VERSION` in `ui/MainMenu.gd` (e.g. `"v1.0.1"`) and commit it.
+2. Export a release build: `godot --headless --path . --export-release
+   "Windows Desktop" build/windows/RTSspoof.exe` (requires Godot's export
+   templates for this exact editor version to be installed first, via the
+   editor's **Editor → Manage Export Templates**, or downloaded from
+   [the matching GitHub release](https://github.com/godotengine/godot/releases)).
+3. On GitHub, create a new Release tagged with that exact same version
+   (e.g. `v1.0.1`) and attach `RTSspoof.exe` as a release asset.
+4. Any older copy of the game will now offer that update the next time it's
+   opened. `export_presets.cfg` and `build/` outputs aren't meant to be
+   committed to the repo (see `.gitignore`) -- only the source and the
+   Release asset matter.
 
 ## Headless / automated testing
 

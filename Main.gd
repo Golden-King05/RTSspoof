@@ -13,6 +13,7 @@ var hud: HUD
 var fog: FogOfWar
 var ai_controller: AIController
 var civ_select: CivSelectScreen
+var main_menu: MainMenu
 
 # Debug/automation hooks, e.g.: godot --path . -- --autostart=egyptian --screenshot=out.png --quit-after-seconds=5
 var _screenshot_path: String = ""
@@ -68,11 +69,19 @@ func _ready() -> void:
 	hud = HUD.new()
 	add_child(hud)
 
+	main_menu = MainMenu.new()
+	add_child(main_menu)
+	main_menu.play_pressed.connect(_on_play_pressed)
+
+	_parse_debug_args()
+
+
+func _on_play_pressed() -> void:
+	if is_instance_valid(main_menu):
+		main_menu.queue_free()
 	civ_select = CivSelectScreen.new()
 	add_child(civ_select)
 	civ_select.civ_chosen.connect(_on_civ_chosen)
-
-	_parse_debug_args()
 
 
 func _parse_debug_args() -> void:
@@ -211,7 +220,10 @@ func _process(delta: float) -> void:
 
 
 func _on_civ_chosen(human_civ: String) -> void:
-	civ_select.queue_free()
+	if is_instance_valid(main_menu):
+		main_menu.queue_free()
+	if is_instance_valid(civ_select):
+		civ_select.queue_free()
 	GameManager.start_match(human_civ, _forced_ai_civ)
 
 	fog = FogOfWar.new()
