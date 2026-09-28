@@ -1,9 +1,9 @@
 # RTSspoof
 
 A small Age of Empires II–inspired real-time strategy prototype built in
-Godot 4 (GDScript), featuring three playable civilizations: the
-**Egyptians**, the **British**, and the **Achaemenids** (Cyrus the Great's
-Persian Empire).
+Godot 4 (GDScript), featuring four playable civilizations: the
+**Egyptians**, the **British**, the **Achaemenids** (Cyrus the Great's
+Persian Empire), and the **Vikings**.
 
 ## Requirements
 
@@ -15,7 +15,7 @@ Persian Empire).
 1. Open Godot, choose "Import", and select `project.godot` in this folder.
 2. Press **Run** (F5). The game opens on a civilization-select screen.
 3. Pick a civilization to start a 1v1 match against a scripted AI opponent
-   randomly playing one of the other two.
+   randomly playing one of the other three.
 
 ## Controls
 
@@ -40,11 +40,18 @@ Persian Empire).
 | Egyptians | Villagers gather Food 20% faster from farms/bushes built near water; start with +50 Gold | War Chariot (fast melee) |
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
 | Achaemenids | All units move 15% faster; start with +100 Gold | Immortal (elite heavy infantry) |
+| Vikings | Raiding: every 10 damage dealt to an enemy building loots 1 Wood or Stone (by building type) + 0.5 Gold; start with +40 Wood | Berserker (fast, hard-hitting melee) |
 
 Lakes are scattered around the map (one near each base, one contested in
 the middle) — they're impassable, and any food source (a placed Farm or a
 wild berry bush) within range of one counts as "near water" for the
 Egyptian bonus. Select a Farm to see whether it's currently in range.
+
+Vikings loot resources by attacking buildings: Town Centers pay out in
+Stone, everything else (House, Barracks, Farm) pays out in Wood, always
+alongside a little Gold. Damage carries over between hits, so it doesn't
+need to land in neat multiples of 10 — a Berserker's fast attacks are the
+best raiders since they cross that threshold quickest.
 
 ## Feature scope (core prototype)
 

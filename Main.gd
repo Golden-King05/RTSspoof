@@ -162,6 +162,22 @@ func _run_simulation() -> void:
 	farmer.order_gather(farm)
 	await get_tree().create_timer(4.0).timeout
 	print("[sim] after gathering: player food=", ps.resources.food, " farm.food_remaining=", farm.food_remaining, " farmer.state=", farmer.state)
+
+	# Viking raid-loot chunking test: drive register_raid_damage() directly
+	# so the math is checked precisely regardless of real combat timing.
+	if ps.civ_id == "viking":
+		var dummy_barracks := RTSBuilding.new()
+		world.add_child(dummy_barracks)
+		dummy_barracks.global_position = HUMAN_START + Vector2(500, 0)
+		dummy_barracks.setup("barracks", GameManager.enemy_of(GameManager.HUMAN_ID), false)
+		print("[sim] raid test start: wood=", ps.resources.wood, " gold=", ps.resources.gold)
+		dummy_barracks.register_raid_damage(6.0, GameManager.HUMAN_ID)
+		print("[sim] +6 dmg (carry 6/10): wood=", ps.resources.wood, " gold=", ps.resources.gold, " (expect no change)")
+		dummy_barracks.register_raid_damage(6.0, GameManager.HUMAN_ID)
+		print("[sim] +6 dmg (total 12, 1 chunk, carry 2): wood=", ps.resources.wood, " gold=", ps.resources.gold, " (expect +1 wood, +0.5 gold)")
+		dummy_barracks.register_raid_damage(28.0, GameManager.HUMAN_ID)
+		print("[sim] +28 dmg (total 30, 3 chunks): wood=", ps.resources.wood, " gold=", ps.resources.gold, " (expect +3 wood, +1.5 gold more)")
+
 	print("[sim] DONE")
 
 

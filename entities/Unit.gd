@@ -192,6 +192,8 @@ func _deal_damage(target) -> void:
 	target.queue_redraw()
 	if target.has_method("on_damaged"):
 		target.on_damaged(dmg, self)
+	if target.has_method("register_raid_damage"):
+		target.register_raid_damage(dmg, player_id)
 	if target.hp <= 0.0:
 		if target.has_method("die"):
 			target.die()

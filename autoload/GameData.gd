@@ -69,6 +69,15 @@ const UNIT_STATS := {
 		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "achaemenid",
 		"can_build": false, "can_gather": false,
 	},
+	"berserker": {
+		"display_name": "Berserker",
+		"max_hp": 45, "attack": 10, "armor": 0, "attack_range": 16.0,
+		"move_speed": 110.0, "attack_cooldown": 0.9, "is_ranged": false,
+		"cost": {"food": 55, "gold": 25}, "train_time": 20.0, "pop_cost": 1,
+		"radius": 10.0, "vision_range": 150.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "viking",
+		"can_build": false, "can_gather": false,
+	},
 }
 
 ## Building stat table.
@@ -78,18 +87,21 @@ const BUILDING_STATS := {
 		"max_hp": 600, "cost": {}, "build_time": 0.0,
 		"provides_pop": 5, "can_train": ["villager"],
 		"is_drop_off": true, "radius": 54.0, "vision_range": 220.0,
+		"raid_resource": "stone",
 	},
 	"house": {
 		"display_name": "House",
 		"max_hp": 150, "cost": {"wood": 30}, "build_time": 15.0,
 		"provides_pop": 10, "can_train": [],
 		"is_drop_off": false, "radius": 26.0, "vision_range": 140.0,
+		"raid_resource": "wood",
 	},
 	"barracks": {
 		"display_name": "Barracks",
 		"max_hp": 300, "cost": {"wood": 120}, "build_time": 35.0,
 		"provides_pop": 0, "can_train": ["militia", "archer"],
 		"is_drop_off": false, "radius": 40.0, "vision_range": 160.0,
+		"raid_resource": "wood",
 	},
 	"farm": {
 		"display_name": "Farm",
@@ -97,6 +109,7 @@ const BUILDING_STATS := {
 		"provides_pop": 0, "can_train": [],
 		"is_drop_off": false, "radius": 22.0, "vision_range": 100.0,
 		"is_farm": true, "food_amount": 175.0,
+		"raid_resource": "wood",
 	},
 }
 
@@ -136,6 +149,18 @@ const CIV_DATA := {
 		"unique_unit": "immortal",
 		"barracks_unique": true,
 		"bonus_text": "All units move 15% faster. Start with +100 Gold. Unique Unit: Immortal.",
+	},
+	"viking": {
+		"display_name": "Vikings",
+		"color": Color(0.62, 0.24, 0.14),
+		"gather_bonus": {},
+		"starting_bonus": {"wood": 40},
+		"house_pop_bonus": 0,
+		"ranged_range_bonus": 1.0,
+		"raid_bonus": {"damage_per_chunk": 10.0, "resource_per_chunk": 1.0, "gold_per_chunk": 0.5},
+		"unique_unit": "berserker",
+		"barracks_unique": true,
+		"bonus_text": "Raiding: every 10 damage dealt to an enemy building loots 1 Wood/Stone (by building type) + 0.5 Gold. Start with +40 Wood. Unique Unit: Berserker.",
 	},
 }
 

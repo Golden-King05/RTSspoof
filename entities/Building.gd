@@ -34,6 +34,10 @@ var food_max: float = 0.0
 var _dead: bool = false
 var _obstacle: NavigationObstacle2D
 
+# Viking raiding: accumulated damage per attacking player_id, paid out in
+# chunks once it crosses that civ's raid_bonus.damage_per_chunk threshold.
+var _raid_damage_carry: Dictionary = {}
+
 
 func setup(p_building_type: String, p_player_id: int, start_under_construction: bool = true) -> void:
 	building_type = p_building_type
@@ -121,6 +125,28 @@ func _spawn_unit(unit_type: String) -> void:
 
 func on_damaged(_dmg: float, _attacker) -> void:
 	pass
+
+
+## Called for every hit this building takes; pays out Viking-style raid
+## loot to the attacker if their civ has a raid_bonus configured. Damage
+## that doesn't cross the chunk threshold carries over to the next hit.
+func register_raid_damage(dmg: float, attacker_player_id: int) -> void:
+	var attacker_ps: PlayerState = GameManager.get_player(attacker_player_id)
+	if not attacker_ps:
+		return
+	var raid: Dictionary = attacker_ps.civ_data().get("raid_bonus", {})
+	if raid.is_empty():
+		return
+	var chunk_damage: float = raid.get("damage_per_chunk", 10.0)
+	var carry: float = _raid_damage_carry.get(attacker_player_id, 0.0) + dmg
+	var chunks: int = int(carry / chunk_damage)
+	if chunks > 0:
+		var stats: Dictionary = GameData.get_building_stats(building_type)
+		var loot_res: String = stats.get("raid_resource", "wood")
+		attacker_ps.add_resource(loot_res, chunks * float(raid.get("resource_per_chunk", 1.0)))
+		attacker_ps.add_resource("gold", chunks * float(raid.get("gold_per_chunk", 0.5)))
+		carry -= chunks * chunk_damage
+	_raid_damage_carry[attacker_player_id] = carry
 
 
 func is_depleted() -> bool:
