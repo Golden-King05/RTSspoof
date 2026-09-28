@@ -5,16 +5,24 @@ Godot 4 (GDScript), featuring four playable civilizations: the
 **Egyptians**, the **British**, the **Achaemenids** (Cyrus the Great's
 Persian Empire), and the **Vikings**.
 
-## Requirements
+## Installing & updating
 
-- [Godot Engine 4.3](https://godotengine.org/download) or later (standard/GL
-  Compatibility renderer).
+New here? **[See INSTALL.md](INSTALL.md)** for a full step-by-step guide
+(installing Godot itself, downloading the project, opening and running it —
+written for people who haven't done this before).
 
-## Running the game
+Already have it and want the latest version? **[See UPDATING.md](UPDATING.md)**
+for how to pull updates, whether you downloaded a ZIP or cloned with Git.
 
-1. Open Godot, choose "Import", and select `project.godot` in this folder.
-2. Press **Run** (F5). The game opens on a civilization-select screen.
-3. Pick a civilization to start a 1v1 match against a scripted AI opponent
+The short version, if you've done this kind of thing before:
+
+1. Install [Godot Engine 4.3](https://godotengine.org/download) or later
+   (Standard build, GL Compatibility renderer).
+2. Download or clone this repository.
+3. In Godot, choose **Import**, select `project.godot` from this folder,
+   then **Import & Edit**.
+4. Press **Run** (F5). The game opens on a civilization-select screen.
+5. Pick a civilization to start a 1v1 match against a scripted AI opponent
    randomly playing one of the other three.
 
 ## Controls
