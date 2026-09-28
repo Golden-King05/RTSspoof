@@ -213,6 +213,16 @@ func _handle_right_click(world_pos: Vector2) -> void:
 				u.order_move(world_pos)
 		return
 
+	if picked != null and picked.type == "building" and picked.node.player_id == GameManager.HUMAN_ID and picked.node.is_farm and not picked.node.under_construction:
+		for u in selected_units:
+			if not is_instance_valid(u):
+				continue
+			if u.can_gather_flag:
+				u.order_gather(picked.node)
+			else:
+				u.order_move(world_pos)
+		return
+
 	if picked != null and picked.type == "building" and picked.node.player_id == GameManager.HUMAN_ID and picked.node.under_construction:
 		for u in selected_units:
 			if not is_instance_valid(u):

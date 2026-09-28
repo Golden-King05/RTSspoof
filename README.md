@@ -23,28 +23,33 @@ and the **British**.
 - **Right-click** to issue a context command to the current selection:
   - on empty ground → move
   - on an enemy unit/building → attack
-  - on a resource (tree, gold/stone mine, berry bush) → gather
+  - on a resource (tree, gold/stone mine, berry bush) or a finished farm → gather
   - on your own unfinished building → help construct
 - **WASD / arrow keys** or moving the mouse to the screen edge → pan the
   camera. **Mouse wheel** → zoom.
-- Select villagers to reveal build buttons (House, Barracks) in the bottom
-  panel; click one, then left-click on the map to place it (**Esc** or
-  right-click cancels placement). Select a Town Center or Barracks to see
-  its training options.
+- Select villagers to reveal build buttons (House, Barracks, Farm) in the
+  bottom panel; click one, then left-click on the map to place it (**Esc**
+  or right-click cancels placement). Select a Town Center or Barracks to
+  see its training options, or a Farm to see its remaining food.
 
 ## Civilizations
 
 | Civ | Bonus | Unique Unit |
 |---|---|---|
-| Egyptians | Villagers gather Food 15% faster; start with +50 Gold | War Chariot (fast melee) |
+| Egyptians | Villagers gather Food 20% faster from farms/bushes built near water; start with +50 Gold | War Chariot (fast melee) |
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
+
+Lakes are scattered around the map (one near each base, one contested in
+the middle) — they're impassable, and any food source (a placed Farm or a
+wild berry bush) within range of one counts as "near water" for the
+Egyptian bonus. Select a Farm to see whether it's currently in range.
 
 ## Feature scope (core prototype)
 
 - Procedurally drawn top-down map with scattered resources (wood, food,
-  gold, stone) around each base and contested in the middle.
+  gold, stone), impassable lakes, and contested resources in the middle.
 - Villagers that gather resources and construct buildings; Town Center,
-  House and Barracks buildings; a population cap economy.
+  House, Barracks and buildable Farm buildings; a population cap economy.
 - NavigationAgent2D pathfinding with avoidance around units/buildings.
 - Melee/ranged combat with HP, armor and attack cooldowns.
 - Grid-based fog of war (unexplored / explored / visible) for the human

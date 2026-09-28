@@ -133,8 +133,10 @@ func _show_unit_actions(units: Array) -> void:
 	if can_build_any:
 		var house_cost: Dictionary = GameData.get_building_stats("house").get("cost", {})
 		var barracks_cost: Dictionary = GameData.get_building_stats("barracks").get("cost", {})
+		var farm_cost: Dictionary = GameData.get_building_stats("farm").get("cost", {})
 		_add_button("Build House (%s)" % _cost_str(house_cost), func() -> void: selection_manager.start_placement("house"))
 		_add_button("Build Barracks (%s)" % _cost_str(barracks_cost), func() -> void: selection_manager.start_placement("barracks"))
+		_add_button("Build Farm (%s)" % _cost_str(farm_cost), func() -> void: selection_manager.start_placement("farm"))
 
 
 func _show_building_actions(building) -> void:
@@ -145,6 +147,11 @@ func _show_building_actions(building) -> void:
 	var dn: String = stats.get("display_name", building.building_type)
 	if building.under_construction:
 		_info_label.text = "%s (under construction)" % dn
+		return
+	if building.is_farm:
+		var near_water: bool = GameManager.is_near_water(building.global_position)
+		var water_note: String = "  (near water)" if near_water else "  (build closer to water for the Egyptian bonus)"
+		_info_label.text = "%s   Food %d/%d%s" % [dn, int(building.food_remaining), int(building.food_max), water_note if building.civ_id == "egyptian" else ""]
 		return
 	_info_label.text = "%s   HP %d/%d" % [dn, int(building.hp), int(building.max_hp)]
 	var ps: PlayerState = GameManager.get_player(player_id)

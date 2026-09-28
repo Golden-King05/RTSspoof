@@ -28,7 +28,7 @@ var can_build_flag: bool = false
 var can_gather_flag: bool = false
 
 var attack_target = null
-var gather_node: RTSResourceNode = null
+var gather_node = null # RTSResourceNode or a farm RTSBuilding -- both quack the same gather API
 var carrying_type: String = ""
 var carrying_amount: float = 0.0
 var construct_target = null
@@ -140,7 +140,7 @@ func order_attack(target) -> void:
 	state = State.ATTACK
 
 
-func order_gather(node: RTSResourceNode) -> void:
+func order_gather(node) -> void:
 	if not can_gather_flag or not is_instance_valid(node):
 		return
 	_clear_task()
@@ -212,7 +212,7 @@ func _process_gather(delta: float) -> void:
 	if _gather_timer <= 0.0:
 		_gather_timer = GATHER_INTERVAL
 		var ps: PlayerState = GameManager.get_player(player_id)
-		var mult: float = ps.gather_multiplier(gather_node.resource_type) if ps else 1.0
+		var mult: float = ps.gather_multiplier(gather_node.resource_type, gather_node.global_position) if ps else 1.0
 		var amount_wanted: float = gather_rate * gather_node.gather_multiplier * mult * GATHER_INTERVAL
 		var granted: float = gather_node.harvest(amount_wanted)
 		carrying_type = gather_node.resource_type

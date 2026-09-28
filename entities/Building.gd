@@ -23,6 +23,14 @@ var _start_hp_fraction: float = 0.1
 
 var train_queue: Array = [] # Array of {"unit_type": String, "time_left": float, "total_time": float}
 
+# Farm-only: once built, a farm acts like a resource node (villagers gather
+# food from it directly) rather than training anything.
+var is_farm: bool = false
+var resource_type: String = "food"
+var gather_multiplier: float = 1.0
+var food_remaining: float = 0.0
+var food_max: float = 0.0
+
 var _dead: bool = false
 var _obstacle: NavigationObstacle2D
 
@@ -39,6 +47,11 @@ func setup(p_building_type: String, p_player_id: int, start_under_construction: 
 	is_drop_off = stats.get("is_drop_off", false)
 	build_time = max(stats.get("build_time", 10.0), 0.01)
 	can_train = GameData.trainable_units_for_building(building_type, civ_id)
+
+	is_farm = stats.get("is_farm", false)
+	if is_farm:
+		food_max = stats.get("food_amount", 175.0)
+		food_remaining = food_max
 
 	under_construction = start_under_construction
 	hp = max_hp * _start_hp_fraction if under_construction else max_hp
@@ -110,6 +123,23 @@ func on_damaged(_dmg: float, _attacker) -> void:
 	pass
 
 
+func is_depleted() -> bool:
+	return is_farm and food_remaining <= 0.0
+
+
+## Farms quack like a RTSResourceNode so villagers can gather them the same
+## way; non-farm buildings just don't get targeted for gathering.
+func harvest(requested: float) -> float:
+	if not is_farm:
+		return 0.0
+	var granted: float = min(requested, food_remaining)
+	food_remaining -= granted
+	queue_redraw()
+	if food_remaining <= 0.0:
+		call_deferred("die")
+	return granted
+
+
 func die() -> void:
 	if _dead:
 		return
@@ -132,11 +162,23 @@ func _draw() -> void:
 		col.a = 0.75
 
 	var r: float = radius
-	draw_rect(Rect2(-r, -r, r * 2, r * 2), col)
-	draw_rect(Rect2(-r, -r, r * 2, r * 2), col.darkened(0.45), false, 3.0)
-	# roof accent triangle to read as a "building"
-	var apex := Vector2(0, -r - r * 0.5)
-	draw_colored_polygon(PackedVector2Array([Vector2(-r, -r), Vector2(r, -r), apex]), col.darkened(0.25))
+	if is_farm:
+		var furrow_col: Color = Color(0.55, 0.42, 0.22) if not under_construction else col
+		draw_rect(Rect2(-r, -r, r * 2, r * 2), furrow_col)
+		var rows := 5
+		for i in range(rows):
+			var y: float = -r + (r * 2) * (float(i) + 0.5) / rows
+			draw_line(Vector2(-r + 3, y), Vector2(r - 3, y), furrow_col.darkened(0.35), 2.0)
+		draw_rect(Rect2(-r, -r, r * 2, r * 2), col.darkened(0.45), false, 3.0)
+		if not under_construction:
+			var fill_ratio: float = 1.0 if food_max <= 0.0 else clamp(food_remaining / food_max, 0.0, 1.0)
+			draw_arc(Vector2.ZERO, r + 6.0, 0, TAU * fill_ratio, 24, Color(1, 1, 1, 0.6), 2.0)
+	else:
+		draw_rect(Rect2(-r, -r, r * 2, r * 2), col)
+		draw_rect(Rect2(-r, -r, r * 2, r * 2), col.darkened(0.45), false, 3.0)
+		# roof accent triangle to read as a "building"
+		var apex := Vector2(0, -r - r * 0.5)
+		draw_colored_polygon(PackedVector2Array([Vector2(-r, -r), Vector2(r, -r), apex]), col.darkened(0.25))
 
 	if under_construction:
 		var ratio: float = clamp(hp / max_hp, 0.0, 1.0)

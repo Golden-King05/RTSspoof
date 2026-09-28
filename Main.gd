@@ -33,6 +33,14 @@ func _ready() -> void:
 	ground.setup(MAP_SIZE)
 	world.add_child(ground)
 
+	var water_regions: Array = [
+		{"center": HUMAN_START + Vector2(-160, 420), "radius": 120.0},
+		{"center": (MAP_SIZE - HUMAN_START) + Vector2(160, -420), "radius": 120.0},
+		{"center": MAP_SIZE / 2.0 + Vector2(-400, 400), "radius": 150.0},
+	]
+	ground.add_water_regions(water_regions)
+	GameManager.register_water_regions(water_regions)
+
 	var nav_region := NavigationRegion2D.new()
 	var nav_poly := NavigationPolygon.new()
 	nav_poly.vertices = PackedVector2Array([
@@ -128,7 +136,33 @@ func _run_simulation() -> void:
 	for b in ps.buildings:
 		if is_instance_valid(b):
 			print("[sim] building=", b.building_type, " hp=", b.hp, "/", b.max_hp, " under_construction=", b.under_construction)
-	print("[sim] final unit count=", ps.units.size(), " DONE")
+	print("[sim] final unit count=", ps.units.size())
+
+	# Water-gated gather bonus sanity check (should only matter for Egyptians).
+	var lake_center: Vector2 = HUMAN_START + Vector2(-160, 420)
+	var near_water_pos: Vector2 = lake_center + Vector2(200, 0) # inside the 160px margin outside the lake's 120 radius
+	var far_pos: Vector2 = HUMAN_START + Vector2(1200, 1200) # nowhere near any lake
+	print("[sim] is_near_water(near)=", GameManager.is_near_water(near_water_pos), " is_near_water(far)=", GameManager.is_near_water(far_pos))
+	print("[sim] %s gather_multiplier(food, near_water)=%s far=%s" % [ps.civ_id, ps.gather_multiplier("food", near_water_pos), ps.gather_multiplier("food", far_pos)])
+	var enemy: PlayerState = GameManager.get_player(GameManager.enemy_of(GameManager.HUMAN_ID))
+	print("[sim] %s gather_multiplier(food, near_water)=%s far=%s" % [enemy.civ_id, enemy.gather_multiplier("food", near_water_pos), enemy.gather_multiplier("food", far_pos)])
+
+	# End-to-end farm test: place one near water, assign a villager, watch it harvest.
+	var farm := RTSBuilding.new()
+	world.add_child(farm)
+	farm.global_position = near_water_pos
+	farm.setup("farm", GameManager.HUMAN_ID, true)
+	var farmer = ps.units[0]
+	farmer.order_construct(farm)
+	print("[sim] farm placed near water, food before=", ps.resources.food)
+
+	await get_tree().create_timer(6.0).timeout
+	print("[sim] farm under_construction=", farm.under_construction, " food_remaining=", farm.food_remaining)
+
+	farmer.order_gather(farm)
+	await get_tree().create_timer(4.0).timeout
+	print("[sim] after gathering: player food=", ps.resources.food, " farm.food_remaining=", farm.food_remaining, " farmer.state=", farmer.state)
+	print("[sim] DONE")
 
 
 func _process(delta: float) -> void:

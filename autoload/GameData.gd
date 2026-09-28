@@ -82,6 +82,13 @@ const BUILDING_STATS := {
 		"provides_pop": 0, "can_train": ["militia", "archer"],
 		"is_drop_off": false, "radius": 40.0, "vision_range": 160.0,
 	},
+	"farm": {
+		"display_name": "Farm",
+		"max_hp": 80, "cost": {"wood": 60}, "build_time": 12.0,
+		"provides_pop": 0, "can_train": [],
+		"is_drop_off": false, "radius": 22.0, "vision_range": 100.0,
+		"is_farm": true, "food_amount": 175.0,
+	},
 }
 
 ## Civilization data: bonuses and unique units, AoE2-inspired.
@@ -89,13 +96,14 @@ const CIV_DATA := {
 	"egyptian": {
 		"display_name": "Egyptians",
 		"color": Color(0.85, 0.68, 0.18),
-		"gather_bonus": {"food": 1.15},
+		"gather_bonus": {},
+		"water_gather_bonus": {"food": 1.20},
 		"starting_bonus": {"gold": 50},
 		"house_pop_bonus": 0,
 		"ranged_range_bonus": 1.0,
 		"unique_unit": "war_chariot",
 		"barracks_unique": true,
-		"bonus_text": "Villagers gather Food 15% faster. Start with +50 Gold. Unique Unit: War Chariot.",
+		"bonus_text": "Villagers gather Food 20% faster near water. Start with +50 Gold. Unique Unit: War Chariot.",
 	},
 	"british": {
 		"display_name": "British",

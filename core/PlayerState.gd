@@ -88,10 +88,15 @@ func unregister_building(building) -> void:
 	population_changed.emit()
 
 
-func gather_multiplier(res_type: String) -> float:
+## `world_pos` is the resource/farm being gathered from -- some bonuses
+## (e.g. the Egyptian farm bonus) only apply when it's near water.
+func gather_multiplier(res_type: String, world_pos: Vector2 = Vector2.INF) -> float:
 	var civ: Dictionary = civ_data()
-	var bonuses: Dictionary = civ.get("gather_bonus", {})
-	return bonuses.get(res_type, 1.0)
+	var mult: float = civ.get("gather_bonus", {}).get(res_type, 1.0)
+	var water_bonus: Dictionary = civ.get("water_gather_bonus", {})
+	if water_bonus.has(res_type) and is_finite(world_pos.x) and GameManager.is_near_water(world_pos):
+		mult *= float(water_bonus[res_type])
+	return mult
 
 
 func range_multiplier() -> float:

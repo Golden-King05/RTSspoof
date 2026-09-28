@@ -8,6 +8,13 @@ var players: Array = [] # Array[PlayerState]
 var match_started: bool = false
 var game_over: bool = false
 
+## Water bodies for the current map, as {"center": Vector2, "radius": float}.
+## Registered by Main.gd once the map is generated; queried by
+## PlayerState.gather_multiplier() for water-adjacency bonuses (e.g. the
+## Egyptian farm bonus).
+var water_regions: Array = []
+const WATER_PROXIMITY_MARGIN := 160.0
+
 signal match_began
 signal game_ended(winner_id: int)
 
@@ -20,6 +27,17 @@ func start_match(human_civ: String) -> void:
 	match_started = true
 	game_over = false
 	match_began.emit()
+
+
+func register_water_regions(regions: Array) -> void:
+	water_regions = regions
+
+
+func is_near_water(pos: Vector2) -> bool:
+	for region in water_regions:
+		if pos.distance_to(region.center) <= region.radius + WATER_PROXIMITY_MARGIN:
+			return true
+	return false
 
 
 func get_player(player_id: int) -> PlayerState:
