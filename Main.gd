@@ -195,6 +195,27 @@ func _run_simulation() -> void:
 		dummy_barracks.register_raid_damage(28.0, GameManager.HUMAN_ID)
 		print("[sim] +28 dmg (total 30, 3 chunks): wood=", ps.resources.wood, " gold=", ps.resources.gold, " (expect +3 wood, +1.5 gold more)")
 
+	# Resource-specific drop-off test: a villager carrying wood should route
+	# to a nearby Lumberjack rather than walking all the way back to the
+	# Town Center, and a Lumberjack should never accept gold/stone/food.
+	var lumberjack := RTSBuilding.new()
+	world.add_child(lumberjack)
+	lumberjack.global_position = HUMAN_START + Vector2(300, 300)
+	lumberjack.setup("lumberjack", GameManager.HUMAN_ID, false)
+	var nearest_for_wood = ps.nearest_dropoff(lumberjack.global_position + Vector2(10, 10), "wood")
+	var nearest_for_gold = ps.nearest_dropoff(lumberjack.global_position + Vector2(10, 10), "gold")
+	print("[sim] lumberjack accepts wood from beside it: ", nearest_for_wood == lumberjack, " (expect true)")
+	print("[sim] lumberjack does NOT accept gold from beside it: ", nearest_for_gold == lumberjack, " (expect false)")
+
+	var hauler = ps.units[1]
+	hauler.global_position = lumberjack.global_position + Vector2(15, 0)
+	hauler.carrying_type = "wood"
+	hauler.carrying_amount = 7.0
+	hauler.state = RTSUnit.State.RETURN
+	var wood_before: float = ps.resources.wood
+	await get_tree().create_timer(0.5).timeout
+	print("[sim] wood after depositing at lumberjack: ", ps.resources.wood, " (expect +7 from ", wood_before, ")")
+
 	print("[sim] DONE")
 
 

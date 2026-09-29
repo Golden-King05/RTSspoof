@@ -43,6 +43,7 @@ func _think() -> void:
 	_maybe_build_house(ps, reserved)
 	_maybe_build_barracks(ps, reserved)
 	_maybe_build_farm(ps, reserved)
+	_maybe_build_resource_camps(ps, reserved)
 	_maybe_train_military(ps, reserved)
 	_maybe_attack(ps)
 
@@ -228,6 +229,64 @@ func _pick_farm_position(ps: PlayerState, base_pos: Vector2) -> Vector2:
 		if is_finite(near_water_pos.x):
 			return near_water_pos
 	return base_pos + Vector2(randf_range(-160, 160), randf_range(-160, 160))
+
+
+## Resource-specific depots (Lumberjack/Mine/Windmill): each accepts only
+## certain resource types, so unlike Farm/House there's no quantity target
+## here -- just one of each, built beside whichever matching resource
+## cluster sits closest to home, once affordable.
+const RESOURCE_CAMP_TYPES := {
+	"lumberjack": ["wood"],
+	"mine_camp": ["stone", "gold"],
+	"windmill": ["food"],
+}
+
+
+func _maybe_build_resource_camps(ps: PlayerState, reserved: Dictionary) -> void:
+	for building_type in RESOURCE_CAMP_TYPES.keys():
+		var already_built := false
+		for b in ps.buildings:
+			if is_instance_valid(b) and b.building_type == building_type:
+				already_built = true
+				break
+		if already_built:
+			continue
+		var cost: Dictionary = GameData.get_building_stats(building_type).get("cost", {})
+		if not _can_afford_with_reserve(ps, cost, reserved):
+			_reserve(reserved, cost)
+			continue
+		var target = _find_nearest_resource_of_types(ps, RESOURCE_CAMP_TYPES[building_type])
+		if target == null:
+			continue
+		var angle: float = randf() * TAU
+		var pos: Vector2 = target.global_position + Vector2(cos(angle), sin(angle)) * 50.0
+		_build_building(ps, building_type, pos)
+
+
+## Nearest wild resource node (or, if "food" is one of `types`, this
+## player's own finished Farms too) of a matching type, measured from home.
+func _find_nearest_resource_of_types(ps: PlayerState, types: Array):
+	var tc = ps.town_center()
+	var from_pos: Vector2 = tc.global_position if tc else Vector2.ZERO
+	var best = null
+	var best_d := INF
+	for r in get_tree().get_nodes_in_group("resources") as Array:
+		if not is_instance_valid(r) or r.is_depleted():
+			continue
+		if not types.has(r.resource_type):
+			continue
+		var d: float = from_pos.distance_to(r.global_position)
+		if d < best_d:
+			best_d = d
+			best = r
+	if types.has("food"):
+		for b in ps.buildings:
+			if is_instance_valid(b) and b.is_farm and not b.under_construction and not b.is_depleted():
+				var d: float = from_pos.distance_to(b.global_position)
+				if d < best_d:
+					best_d = d
+					best = b
+	return best
 
 
 func _build_building(ps: PlayerState, building_type: String, pos_override: Vector2 = Vector2.INF) -> void:

@@ -14,7 +14,7 @@ var hp: float = 100.0
 var armor: float = 0.0
 var radius: float = 30.0
 var vision_range: float = 150.0
-var is_drop_off: bool = false
+var drop_off_types: Array = []
 var can_train: Array = []
 var build_time: float = 10.0
 
@@ -45,11 +45,11 @@ func setup(p_building_type: String, p_player_id: int, start_under_construction: 
 	var ps: PlayerState = GameManager.get_player(player_id)
 	civ_id = ps.civ_id if ps else ""
 	var stats: Dictionary = GameData.get_building_stats(building_type)
-	max_hp = stats.get("max_hp", 100.0)
+	max_hp = stats.get("max_hp", 100.0) * (ps.building_hp_multiplier() if ps else 1.0)
 	radius = stats.get("radius", 30.0)
 	vision_range = stats.get("vision_range", 150.0)
-	is_drop_off = stats.get("is_drop_off", false)
-	build_time = max(stats.get("build_time", 10.0), 0.01)
+	drop_off_types = stats.get("drop_off_types", [])
+	build_time = max(stats.get("build_time", 10.0), 0.01) / (ps.construction_speed_multiplier() if ps else 1.0)
 	can_train = GameData.trainable_units_for_building(building_type, civ_id)
 
 	is_farm = stats.get("is_farm", false)

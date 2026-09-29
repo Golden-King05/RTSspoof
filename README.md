@@ -1,9 +1,9 @@
 # RTSspoof
 
 A small Age of Empires II–inspired real-time strategy prototype built in
-Godot 4 (GDScript), featuring four playable civilizations: the
+Godot 4 (GDScript), featuring five playable civilizations: the
 **Egyptians**, the **British**, the **Achaemenids** (Cyrus the Great's
-Persian Empire), and the **Vikings**.
+Persian Empire), the **Vikings**, and the **Romans**.
 
 ## Play now (Windows, no Godot needed)
 
@@ -41,7 +41,7 @@ The short version, if you've done this kind of thing before:
 4. Press **Run** (F5). The game opens on a main menu; click **Play** to
    reach the civilization-select screen.
 5. Pick a civilization to start a 1v1 match against a scripted AI opponent
-   randomly playing one of the other three.
+   randomly playing one of the other four.
 
 ## Controls
 
@@ -54,10 +54,12 @@ The short version, if you've done this kind of thing before:
   - on your own unfinished building → help construct
 - **WASD / arrow keys** or moving the mouse to the screen edge → pan the
   camera. **Mouse wheel** → zoom.
-- Select villagers to reveal build buttons (House, Barracks, Farm) in the
-  bottom panel; click one, then left-click on the map to place it (**Esc**
-  or right-click cancels placement). Select a Town Center or Barracks to
-  see its training options, or a Farm to see its remaining food.
+- Select villagers to reveal build buttons (House, Barracks, Farm,
+  Lumberjack, Mine, Windmill) in the bottom panel; click one, then
+  left-click on the map to place it (**Esc** or right-click cancels
+  placement). Select a Town Center or Barracks to see its training
+  options, a Farm to see its remaining food, or a Lumberjack/Mine/Windmill
+  to see which resource(s) it accepts.
 
 ## Civilizations
 
@@ -67,6 +69,7 @@ The short version, if you've done this kind of thing before:
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
 | Achaemenids | All units move 15% faster; start with +100 Gold | Immortal (elite heavy infantry) |
 | Vikings | Raiding: every 10 damage dealt to an enemy building loots 1 Wood or Stone (by building type) + 0.5 Gold; start with +40 Wood | Berserker (fast, hard-hitting melee) |
+| Romans | Buildings are constructed 30% faster and have 20% more HP; start with +30 Stone | Legionary (high-armor balanced melee) |
 
 Lakes are scattered around the map (one near each base, one contested in
 the middle) — they're impassable, and any food source (a placed Farm or a
@@ -88,7 +91,11 @@ best raiders since they cross that threshold quickest.
   of each resource type is guaranteed near every base; the rest, forests
   included, are scattered across the whole map.
 - Villagers that gather resources and construct buildings; Town Center,
-  House, Barracks and buildable Farm buildings; a population cap economy.
+  House, Barracks and Farm, plus resource-specific depots -- Lumberjack
+  Camp (wood), Mine (stone + gold) and Windmill (food) -- that let
+  villagers drop off close to a resource cluster instead of walking all
+  the way back to the Town Center (which still accepts everything). A
+  population cap economy ties it together.
 - NavigationAgent2D pathfinding with avoidance around units/buildings.
 - Melee/ranged combat with HP, armor and attack cooldowns.
 - Grid-based fog of war (unexplored / explored / visible) for the human
@@ -102,7 +109,9 @@ best raiders since they cross that threshold quickest.
   also prioritizes economic buildings over discretionary army training --
   it won't blow its stockpile on a unit the moment it can afford one if a
   Farm or House is still unfunded, so it actually saves up for big-ticket
-  items instead of spending everything as it comes in.
+  items instead of spending everything as it comes in. It builds one
+  Lumberjack/Mine/Windmill each next to whichever matching resource cluster
+  sits closest to home once it can afford to.
 
 This is a vertical-slice prototype, not a full game: no tech tree, ages,
 or campaign.

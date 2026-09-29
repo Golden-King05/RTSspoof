@@ -131,12 +131,11 @@ func _show_unit_actions(units: Array) -> void:
 			can_build_any = true
 			break
 	if can_build_any:
-		var house_cost: Dictionary = GameData.get_building_stats("house").get("cost", {})
-		var barracks_cost: Dictionary = GameData.get_building_stats("barracks").get("cost", {})
-		var farm_cost: Dictionary = GameData.get_building_stats("farm").get("cost", {})
-		_add_button("Build House (%s)" % _cost_str(house_cost), func() -> void: selection_manager.start_placement("house"))
-		_add_button("Build Barracks (%s)" % _cost_str(barracks_cost), func() -> void: selection_manager.start_placement("barracks"))
-		_add_button("Build Farm (%s)" % _cost_str(farm_cost), func() -> void: selection_manager.start_placement("farm"))
+		const BUILDABLE_TYPES := ["house", "barracks", "farm", "lumberjack", "mine_camp", "windmill"]
+		for building_type in BUILDABLE_TYPES:
+			var stats: Dictionary = GameData.get_building_stats(building_type)
+			var captured_type: String = building_type
+			_add_button("Build %s (%s)" % [stats.get("display_name", building_type), _cost_str(stats.get("cost", {}))], func() -> void: selection_manager.start_placement(captured_type))
 
 
 func _show_building_actions(building) -> void:
@@ -153,7 +152,14 @@ func _show_building_actions(building) -> void:
 		var water_note: String = "  (near water)" if near_water else "  (build closer to water for the Egyptian bonus)"
 		_info_label.text = "%s   Food %d/%d%s" % [dn, int(building.food_remaining), int(building.food_max), water_note if building.civ_id == "egyptian" else ""]
 		return
-	_info_label.text = "%s   HP %d/%d" % [dn, int(building.hp), int(building.max_hp)]
+	var drop_types: Array = stats.get("drop_off_types", [])
+	var drop_note: String = ""
+	if not drop_types.is_empty():
+		var names: Array = []
+		for t in drop_types:
+			names.append(String(t).capitalize())
+		drop_note = "   accepts: %s" % ", ".join(names)
+	_info_label.text = "%s   HP %d/%d%s" % [dn, int(building.hp), int(building.max_hp), drop_note]
 	var ps: PlayerState = GameManager.get_player(player_id)
 	if not ps:
 		return

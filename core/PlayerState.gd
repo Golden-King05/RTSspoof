@@ -109,6 +109,16 @@ func move_speed_multiplier() -> float:
 	return civ.get("move_speed_bonus", 1.0)
 
 
+func construction_speed_multiplier() -> float:
+	var civ: Dictionary = civ_data()
+	return civ.get("construction_speed_bonus", 1.0)
+
+
+func building_hp_multiplier() -> float:
+	var civ: Dictionary = civ_data()
+	return civ.get("building_hp_bonus", 1.0)
+
+
 func town_center() -> Node:
 	for b in buildings:
 		if is_instance_valid(b) and b.building_type == "town_center" and not b.under_construction:
@@ -116,14 +126,17 @@ func town_center() -> Node:
 	return null
 
 
-func nearest_dropoff(from_pos: Vector2) -> Node:
+## Nearest building that accepts `resource_type` (Town Center takes all
+## four; Lumberjack/Mine/Windmill only the type(s) they're built for).
+func nearest_dropoff(from_pos: Vector2, resource_type: String) -> Node:
 	var best: Node = null
 	var best_dist := INF
 	for b in buildings:
-		if not is_instance_valid(b):
+		if not is_instance_valid(b) or b.under_construction:
 			continue
 		var stats: Dictionary = GameData.get_building_stats(b.building_type)
-		if not stats.get("is_drop_off", false) or b.under_construction:
+		var drop_types: Array = stats.get("drop_off_types", [])
+		if not drop_types.has(resource_type):
 			continue
 		var d: float = from_pos.distance_squared_to(b.global_position)
 		if d < best_dist:

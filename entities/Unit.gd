@@ -231,7 +231,7 @@ func _process_return(delta: float) -> void:
 	var ps: PlayerState = GameManager.get_player(player_id)
 	if not ps:
 		return
-	var drop = ps.nearest_dropoff(global_position)
+	var drop = ps.nearest_dropoff(global_position, carrying_type)
 	if drop == null:
 		state = State.IDLE
 		return
