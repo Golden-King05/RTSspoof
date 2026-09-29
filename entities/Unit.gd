@@ -41,6 +41,24 @@ var _attack_timer: float = 0.0
 var _gather_timer: float = 0.0
 var _last_delta: float = 0.016
 
+# Aquilifer aura: while a friendly Aquilifer is within its aura_radius,
+# every non-villager ally (this unit included) gets these additive/
+# multiplicative modifiers on top of its base combat stats. Recomputed
+# periodically, not every frame -- see _aura_check_timer.
+var aura_buff_armor: float = 0.0
+var aura_buff_attack: float = 0.0
+var aura_buff_atk_speed_mult: float = 1.0
+var _aura_check_timer: float = 0.0
+const AURA_CHECK_INTERVAL := 0.5
+
+# Applied instead of the buff, to whoever was in range, the instant an
+# Aquilifer dies -- a temporary morale break. Counts down in real time
+# regardless of state.
+var death_debuff_armor: float = 0.0
+var death_debuff_attack: float = 0.0
+var death_debuff_atk_speed_mult: float = 1.0
+var death_debuff_timer: float = 0.0
+
 const GATHER_INTERVAL := 1.0
 const INTERACT_PAD := 8.0
 
@@ -92,6 +110,11 @@ func setup(p_unit_type: String, p_player_id: int) -> void:
 
 func _physics_process(delta: float) -> void:
 	_last_delta = delta
+	_update_death_debuff(delta)
+	_aura_check_timer -= delta
+	if _aura_check_timer <= 0.0:
+		_aura_check_timer = AURA_CHECK_INTERVAL
+		_update_aura_buff()
 	match state:
 		State.MOVE:
 			_step_toward(move_only_target, delta)
@@ -166,6 +189,89 @@ func _clear_task() -> void:
 	_gather_timer = 0.0
 
 
+func _update_death_debuff(delta: float) -> void:
+	if death_debuff_timer <= 0.0:
+		return
+	death_debuff_timer -= delta
+	if death_debuff_timer <= 0.0:
+		death_debuff_timer = 0.0
+		death_debuff_armor = 0.0
+		death_debuff_attack = 0.0
+		death_debuff_atk_speed_mult = 1.0
+		queue_redraw()
+
+
+## Villagers aren't "soldiers" and never carry or receive this aura.
+## Re-derives the buff from scratch each check (rather than accumulating)
+## so it correctly clears the moment this unit steps outside every living
+## Aquilifer's radius.
+func _update_aura_buff() -> void:
+	if can_gather_flag:
+		return
+	var new_armor := 0.0
+	var new_attack := 0.0
+	var new_speed_mult := 1.0
+	var ps: PlayerState = GameManager.get_player(player_id)
+	if ps:
+		var stats: Dictionary = GameData.get_unit_stats("aquilifer")
+		var aura_radius: float = stats.get("aura_radius", 0.0)
+		var buff: Dictionary = stats.get("aura_buff", {})
+		for u in ps.units:
+			if not is_instance_valid(u) or u == self or u.unit_type != "aquilifer":
+				continue
+			if global_position.distance_to(u.global_position) <= aura_radius:
+				new_armor = float(buff.get("armor", 0.0))
+				new_attack = float(buff.get("attack", 0.0))
+				new_speed_mult = float(buff.get("attack_speed_mult", 1.0))
+				break
+	if new_armor != aura_buff_armor or new_attack != aura_buff_attack or new_speed_mult != aura_buff_atk_speed_mult:
+		aura_buff_armor = new_armor
+		aura_buff_attack = new_attack
+		aura_buff_atk_speed_mult = new_speed_mult
+		queue_redraw()
+
+
+## Called on an Aquilifer's own death: everyone who was standing in its
+## aura at that instant flips from being buffed to being debuffed.
+func _apply_death_debuff_to_nearby() -> void:
+	var ps: PlayerState = GameManager.get_player(player_id)
+	if not ps:
+		return
+	var stats: Dictionary = GameData.get_unit_stats("aquilifer")
+	var aura_radius: float = stats.get("aura_radius", 0.0)
+	var debuff: Dictionary = stats.get("aura_debuff_on_death", {})
+	var duration: float = stats.get("aura_debuff_duration", 0.0)
+	for u in ps.units:
+		if not is_instance_valid(u) or u == self or u.can_gather_flag:
+			continue
+		if global_position.distance_to(u.global_position) <= aura_radius:
+			# Clear any live buff immediately rather than waiting for that
+			# unit's own next periodic recheck (up to AURA_CHECK_INTERVAL
+			# later) -- otherwise the stale buff and the fresh debuff
+			# partially cancel out for a moment, masking the death penalty.
+			u.aura_buff_armor = 0.0
+			u.aura_buff_attack = 0.0
+			u.aura_buff_atk_speed_mult = 1.0
+			u.death_debuff_armor = float(debuff.get("armor", 0.0))
+			u.death_debuff_attack = float(debuff.get("attack", 0.0))
+			u.death_debuff_atk_speed_mult = float(debuff.get("attack_speed_mult", 1.0))
+			u.death_debuff_timer = duration
+			u.queue_redraw()
+
+
+func effective_attack() -> float:
+	return max(0.0, float(attack) + aura_buff_attack + death_debuff_attack)
+
+
+func effective_armor() -> float:
+	return max(0.0, float(armor) + aura_buff_armor + death_debuff_armor)
+
+
+func effective_attack_cooldown() -> float:
+	var speed_mult: float = aura_buff_atk_speed_mult * death_debuff_atk_speed_mult
+	return attack_cooldown / max(0.1, speed_mult)
+
+
 func _process_attack(delta: float) -> void:
 	if not is_instance_valid(attack_target) or attack_target.hp <= 0:
 		state = State.IDLE
@@ -182,12 +288,13 @@ func _process_attack(delta: float) -> void:
 			rotation = desired_face.angle()
 		_attack_timer -= delta
 		if _attack_timer <= 0.0:
-			_attack_timer = attack_cooldown
+			_attack_timer = effective_attack_cooldown()
 			_deal_damage(attack_target)
 
 
 func _deal_damage(target) -> void:
-	var dmg: float = max(1.0, float(attack) - float(target.armor))
+	var target_armor: float = target.effective_armor() if target.has_method("effective_armor") else float(target.armor)
+	var dmg: float = max(1.0, effective_attack() - target_armor)
 	target.hp -= dmg
 	target.queue_redraw()
 	if target.has_method("on_damaged"):
@@ -279,6 +386,8 @@ func die() -> void:
 	if _dead:
 		return
 	_dead = true
+	if unit_type == "aquilifer":
+		_apply_death_debuff_to_nearby()
 	var ps: PlayerState = GameManager.get_player(player_id)
 	if ps:
 		ps.unregister_unit(self)
@@ -313,6 +422,18 @@ func _draw() -> void:
 	# selection ring
 	if selected:
 		draw_arc(Vector2.ZERO, radius + 6.0, 0, TAU, 24, Color(0.2, 1.0, 0.3), 2.0)
+		if unit_type == "aquilifer":
+			var aura_radius: float = GameData.get_unit_stats("aquilifer").get("aura_radius", 0.0)
+			if aura_radius > 0.0:
+				draw_arc(Vector2.ZERO, aura_radius, 0, TAU, 48, Color(1.0, 0.85, 0.2, 0.8), 2.0)
+
+	# a thin ring shows whether this unit is currently buffed by a nearby
+	# Aquilifer (gold) or still suffering the morale-break debuff from one
+	# dying (dark red) -- independent of whether it's selected
+	if aura_buff_attack != 0.0 or aura_buff_armor != 0.0 or aura_buff_atk_speed_mult != 1.0:
+		draw_arc(Vector2.ZERO, radius + 3.0, 0, TAU, 16, Color(1.0, 0.85, 0.2, 0.9), 1.5)
+	elif death_debuff_timer > 0.0:
+		draw_arc(Vector2.ZERO, radius + 3.0, 0, TAU, 16, Color(0.5, 0.1, 0.1, 0.9), 1.5)
 
 	# hp bar
 	if hp < max_hp:

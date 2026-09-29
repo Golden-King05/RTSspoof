@@ -69,7 +69,7 @@ The short version, if you've done this kind of thing before:
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
 | Achaemenids | All units move 15% faster; start with +100 Gold | Immortal (elite heavy infantry) |
 | Vikings | Raiding: every 10 damage dealt to an enemy building loots 1 Wood or Stone (by building type) + 0.5 Gold; start with +40 Wood | Berserker (fast, hard-hitting melee) |
-| Romans | Buildings are constructed 30% faster and have 20% more HP; start with +30 Stone | Legionary (high-armor balanced melee) |
+| Romans | Buildings are constructed 30% faster and have 20% more HP; start with +30 Stone | Legionary (high-armor balanced melee), Aquilifer (aura support, trained at the Town Center) |
 
 Lakes are scattered around the map (one near each base, one contested in
 the middle) — they're impassable, and any food source (a placed Farm or a
@@ -81,6 +81,16 @@ Stone, everything else (House, Barracks, Farm) pays out in Wood, always
 alongside a little Gold. Damage carries over between hits, so it doesn't
 need to land in neat multiples of 10 — a Berserker's fast attacks are the
 best raiders since they cross that threshold quickest.
+
+The **Aquilifer** (Romans' Town-Center-trained unit, carrying the legion's
+eagle standard) is a support unit, not a fighter: select it to see its aura
+radius drawn as a circle. Any non-villager ally inside that radius gets a
+bonus to armor, attack and attack speed while the Aquilifer lives — a thin
+gold ring on a unit shows it's currently buffed. If the Aquilifer dies,
+everyone who was in range instead takes the same bonus in reverse (a
+morale-break debuff, shown as a thin dark-red ring) for 10 minutes. Losing
+your standard bearer mid-fight is a real setback, so it's worth keeping
+one behind the front line rather than leading with it.
 
 ## Feature scope (core prototype)
 
@@ -111,7 +121,9 @@ best raiders since they cross that threshold quickest.
   Farm or House is still unfunded, so it actually saves up for big-ticket
   items instead of spending everything as it comes in. It builds one
   Lumberjack/Mine/Windmill each next to whichever matching resource cluster
-  sits closest to home once it can afford to.
+  sits closest to home once it can afford to, and trains one Town-Center
+  unique unit (e.g. a Roman Aquilifer) alongside its villagers if its civ
+  has one.
 
 This is a vertical-slice prototype, not a full game: no tech tree, ages,
 or campaign.

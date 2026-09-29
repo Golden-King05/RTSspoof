@@ -87,6 +87,27 @@ const UNIT_STATS := {
 		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "roman",
 		"can_build": false, "can_gather": false,
 	},
+	## The standard-bearer who carried the legion's silver eagle (the
+	## Aquila) into battle -- losing it was a catastrophic blow to morale.
+	## Trained at the Town Center (see town_center_unique on the Roman civ),
+	## not the Barracks. Its aura_* fields are read directly by Unit.gd,
+	## not through the normal combat-stat path: any non-villager ally within
+	## aura_radius gets aura_buff while it lives; if it dies, everyone who
+	## was in range instead gets aura_debuff_on_death for aura_debuff_duration
+	## seconds -- the same shape of effect, inverted, as a morale break.
+	"aquilifer": {
+		"display_name": "Aquilifer",
+		"max_hp": 40, "attack": 4, "armor": 2, "attack_range": 16.0,
+		"move_speed": 90.0, "attack_cooldown": 1.5, "is_ranged": false,
+		"cost": {"food": 80, "gold": 50}, "train_time": 30.0, "pop_cost": 1,
+		"radius": 10.0, "vision_range": 150.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "roman",
+		"can_build": false, "can_gather": false,
+		"aura_radius": 150.0,
+		"aura_buff": {"armor": 2, "attack": 3, "attack_speed_mult": 1.25},
+		"aura_debuff_on_death": {"armor": -2, "attack": -3, "attack_speed_mult": 0.8},
+		"aura_debuff_duration": 600.0,
+	},
 }
 
 ## Building stat table.
@@ -203,7 +224,8 @@ const CIV_DATA := {
 		"building_hp_bonus": 1.2,
 		"unique_unit": "legionary",
 		"barracks_unique": true,
-		"bonus_text": "Buildings are constructed 30% faster and have 20% more HP. Start with +30 Stone. Unique Unit: Legionary.",
+		"town_center_unique": "aquilifer",
+		"bonus_text": "Buildings are constructed 30% faster and have 20% more HP. Start with +30 Stone. Unique Units: Legionary (Barracks), Aquilifer (Town Center).",
 	},
 }
 
@@ -257,6 +279,13 @@ static func unit_available_for_civ(unit_type: String, civ_id: String) -> bool:
 	return restriction == "" or restriction == civ_id
 
 
+## `barracks_unique`/`unique_unit` and `town_center_unique` are two
+## independent slots -- a civ can have a Barracks-trained unique unit, a
+## Town-Center-trained one, both, or neither. Note `town_center_unique`
+## holds a unit-type *string* directly (unlike `barracks_unique`, which is
+## just a bool paired with the separate `unique_unit` key) -- don't try to
+## generalize these into one `"<building>_unique"` lookup, since
+## `"barracks_unique"` is already taken as that bool flag's exact key name.
 static func trainable_units_for_building(building_type: String, civ_id: String) -> Array:
 	var stats: Dictionary = get_building_stats(building_type)
 	var result: Array = []
@@ -268,4 +297,8 @@ static func trainable_units_for_building(building_type: String, civ_id: String) 
 		var unique_unit: String = civ.get("unique_unit", "")
 		if unique_unit != "" and not result.has(unique_unit):
 			result.append(unique_unit)
+	if building_type == "town_center":
+		var tc_unique: String = civ.get("town_center_unique", "")
+		if tc_unique != "" and not result.has(tc_unique):
+			result.append(tc_unique)
 	return result

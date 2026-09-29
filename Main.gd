@@ -216,6 +216,40 @@ func _run_simulation() -> void:
 	await get_tree().create_timer(0.5).timeout
 	print("[sim] wood after depositing at lumberjack: ", ps.resources.wood, " (expect +7 from ", wood_before, ")")
 
+	# Aquilifer aura test (Roman-only mechanic): a nearby soldier should be
+	# buffed while it lives, debuffed the instant it dies, and the debuff
+	# should expire on its own after aura_debuff_duration seconds.
+	if ps.civ_id == "roman":
+		var aquilifer: RTSUnit = RTSUnit.new()
+		world.add_child(aquilifer)
+		aquilifer.global_position = HUMAN_START + Vector2(-400, -400)
+		aquilifer.setup("aquilifer", GameManager.HUMAN_ID)
+
+		var soldier: RTSUnit = RTSUnit.new()
+		world.add_child(soldier)
+		soldier.global_position = aquilifer.global_position + Vector2(50, 0) # well inside the 150 aura radius
+		soldier.setup("legionary", GameManager.HUMAN_ID)
+
+		await get_tree().create_timer(0.6).timeout # let the 0.5s aura-check tick run
+		print("[sim] soldier in range: eff_attack=", soldier.effective_attack(), " eff_armor=", soldier.effective_armor(),
+			" eff_cooldown=", soldier.effective_attack_cooldown(),
+			" (base atk=", soldier.attack, " armor=", soldier.armor, " cooldown=", soldier.attack_cooldown, ", expect buffed)")
+
+		soldier.global_position = aquilifer.global_position + Vector2(2000, 0) # far outside the aura
+		await get_tree().create_timer(0.6).timeout
+		print("[sim] soldier out of range: eff_attack=", soldier.effective_attack(), " eff_armor=", soldier.effective_armor(),
+			" (expect back to base atk=", soldier.attack, " armor=", soldier.armor, ")")
+
+		soldier.global_position = aquilifer.global_position + Vector2(50, 0) # back in range before the aquilifer dies
+		await get_tree().create_timer(0.6).timeout
+		aquilifer.die()
+		print("[sim] soldier after aquilifer death: eff_attack=", soldier.effective_attack(), " eff_armor=", soldier.effective_armor(),
+			" debuff_timer=", soldier.death_debuff_timer, " (expect debuffed, timer=600)")
+
+		soldier._update_death_debuff(700.0) # fast-forward past the 600s debuff duration
+		print("[sim] soldier after debuff expires: eff_attack=", soldier.effective_attack(), " eff_armor=", soldier.effective_armor(),
+			" debuff_timer=", soldier.death_debuff_timer, " (expect back to base, timer=0)")
+
 	print("[sim] DONE")
 
 

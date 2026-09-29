@@ -40,6 +40,7 @@ func _think() -> void:
 	var reserved: Dictionary = {}
 	_assign_idle_villagers(ps)
 	_maybe_train_villager(ps, reserved)
+	_maybe_train_town_center_unique(ps, reserved)
 	_maybe_build_house(ps, reserved)
 	_maybe_build_barracks(ps, reserved)
 	_maybe_build_farm(ps, reserved)
@@ -169,6 +170,31 @@ func _maybe_train_villager(ps: PlayerState, reserved: Dictionary) -> void:
 		tc.queue_train("villager")
 	else:
 		_reserve(reserved, cost)
+
+
+## Trains whatever civ-specific unit(s) the Town Center offers besides
+## Villager (e.g. the Roman Aquilifer) -- not hardcoded to Romans, so this
+## keeps working if another civ ever gets a town_center_unique too. Only
+## keeps one of each at a time, since these are support units, not an army.
+func _maybe_train_town_center_unique(ps: PlayerState, reserved: Dictionary) -> void:
+	var tc = ps.town_center()
+	if not tc:
+		return
+	for unit_type in GameData.trainable_units_for_building("town_center", ps.civ_id):
+		if unit_type == "villager":
+			continue
+		var have := false
+		for u in ps.units:
+			if is_instance_valid(u) and u.unit_type == unit_type:
+				have = true
+				break
+		if have or tc.train_queue.size() >= 2:
+			continue
+		var cost: Dictionary = GameData.get_unit_stats(unit_type).get("cost", {})
+		if _can_afford_with_reserve(ps, cost, reserved):
+			tc.queue_train(unit_type)
+		else:
+			_reserve(reserved, cost)
 
 
 func _maybe_build_house(ps: PlayerState, reserved: Dictionary) -> void:
