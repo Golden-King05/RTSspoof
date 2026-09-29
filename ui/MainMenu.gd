@@ -12,7 +12,7 @@ signal play_pressed
 ## Bump this (and push a matching releases/latest/VERSION + RTSspoof.exe,
 ## see the README's "Publishing a new Windows build" section) whenever a
 ## new build goes out, so running copies can tell they're out of date.
-const CURRENT_VERSION := "v1.0.6"
+const CURRENT_VERSION := "v1.0.7"
 const RAW_BASE := "https://raw.githubusercontent.com/Golden-King05/RTSspoof/claude/rts-aoe2-clone-game-8k7moo/releases/latest"
 const VERSION_CHECK_URL := RAW_BASE + "/VERSION"
 const EXE_DOWNLOAD_URL := RAW_BASE + "/RTSspoof.exe"

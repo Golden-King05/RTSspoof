@@ -157,16 +157,23 @@ can support it without stalling everything else.
 - Grid-based fog of war (unexplored / explored / visible) for the human
   player.
 - A scripted AI opponent that gathers, expands, builds farms/houses/a
-  barracks, trains an army and attack-moves once strong enough. It reads
-  its own civ's bonuses to adapt: it builds Farms near a lake shore when
-  playing Egyptians (to actually earn the water bonus), raids in smaller
-  and more frequent parties when playing Vikings, and commits its army a
-  bit sooner when playing a faster-moving civ like the Achaemenids. It
-  also prioritizes economic buildings over discretionary army training --
-  it won't blow its stockpile on a unit the moment it can afford one if a
-  Farm or House is still unfunded, so it actually saves up for big-ticket
-  items instead of spending everything as it comes in. It builds one
-  Lumberjack/Mine/Windmill each next to whichever matching resource cluster
+  barracks, trains an army and attack-moves once strong enough. Every
+  2 seconds it scores every candidate action (train a villager, build a
+  house, advance an age, ...) by how urgent/valuable it actually is right
+  now -- not a fixed priority list -- then spends down its stockpile
+  highest-score-first, so priority genuinely shifts with game state: a
+  House rockets to the top the instant population room runs low, a
+  villager shortfall outweighs almost everything while the workforce is
+  badly under-staffed, and so on (see `ai/AIController.gd`'s `_score_*`
+  functions). It reads its own civ's bonuses to adapt: it builds Farms near
+  a lake shore when playing Egyptians (to actually earn the water bonus),
+  raids in smaller and more frequent parties when playing Vikings, and
+  commits its army a bit sooner when playing a faster-moving civ like the
+  Achaemenids. It also weighs economic buildings above discretionary army
+  training -- it won't blow its stockpile on a unit the moment it can
+  afford one if a Farm or House is still unfunded, so it actually saves up
+  for big-ticket items instead of spending everything as it comes in. It
+  builds one Lumberjack/Mine/Windmill each next to whichever matching resource cluster
   sits closest to home once it can afford to, and trains one Town-Center
   unique unit (e.g. a Roman Aquilifer) alongside its villagers if its civ
   has one. It also works its way through the ages on its own -- advancing,

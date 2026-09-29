@@ -5,6 +5,18 @@ class_name AIController
 ## strong enough. Reads each player's civ_data() (bonuses, not hardcoded
 ## civ ids) so the same script adapts its economy/army targets and farm
 ## placement to whichever civilization it's been assigned.
+##
+## Decision-making is weighted, not ordered: every candidate action (train a
+## villager, build a house, advance an age, ...) is scored each tick by how
+## urgent/valuable it actually is *right now* -- see the _score_* functions
+## -- and _think() executes them highest-score-first, using the same
+## resource-reservation mechanic as before (_can_afford_with_reserve/
+## _reserve) so a big-ticket item can still accumulate savings against
+## everything ranked below it. This lets priority actually shift with game
+## state instead of being frozen at whatever order the code happened to
+## list functions in -- e.g. housing rockets to the top the instant
+## population room gets tight, even though it's normally well behind
+## aging up or training villagers.
 
 var player_id: int = 1
 var world_root: Node2D
@@ -25,37 +37,46 @@ func _process(delta: float) -> void:
 		_think()
 
 
+## Every entry is {"score": float, "action": Callable(ps, reserved)}. Wiring
+## a new decision in just means adding one line here plus its _score_*/
+## _act_* pair -- nothing needs to know where it ranks relative to the rest.
+func _build_candidates(ps: PlayerState) -> Array:
+	return [
+		{"score": _score_advance_age(ps), "action": _act_advance_age},
+		{"score": _score_train_villager(ps), "action": _act_train_villager},
+		{"score": _score_train_town_center_unique(ps), "action": _act_train_town_center_unique},
+		{"score": _score_build_house(ps), "action": _act_build_house},
+		{"score": _score_build_barracks(ps), "action": _act_build_barracks},
+		{"score": _score_build_stable(ps), "action": _act_build_stable},
+		{"score": _score_build_tower(ps), "action": _act_build_tower},
+		{"score": _score_build_fort(ps), "action": _act_build_fort},
+		{"score": _score_build_farm(ps), "action": _act_build_farm},
+		{"score": _score_build_resource_camps(ps), "action": _act_build_resource_camps},
+		{"score": _score_train_military(ps), "action": _act_train_military},
+		{"score": _score_research_upgrades(ps), "action": _act_research_upgrades},
+	]
+
+
 func _think() -> void:
 	if GameManager.game_over:
 		return
 	var ps: PlayerState = GameManager.get_player(player_id)
 	if not ps:
 		return
-	# `reserved` accumulates as higher-priority needs (villagers, housing,
-	# barracks, farms) go unfunded this tick, so lower-priority spending
-	# (discretionary army training) treats that portion of the stockpile as
-	# untouchable instead of greedily spending every resource the instant
-	# it arrives -- otherwise a big-ticket item like a Farm would never get
-	# a chance to accumulate its cost.
-	var reserved: Dictionary = {}
 	_assign_idle_villagers(ps)
-	# Aging up is checked before even villager training claims anything, or
-	# its reservation would never actually hold onto enough to afford the
-	# advance -- villager training alone can absorb food indefinitely (the
-	# target keeps rising with population cap), so left any later in the
-	# order it would starve the age-up forever rather than just slow it.
-	_maybe_advance_age(ps, reserved)
-	_maybe_train_villager(ps, reserved)
-	_maybe_train_town_center_unique(ps, reserved)
-	_maybe_build_house(ps, reserved)
-	_maybe_build_barracks(ps, reserved)
-	_maybe_build_stable(ps, reserved)
-	_maybe_build_tower(ps, reserved)
-	_maybe_build_fort(ps, reserved)
-	_maybe_build_farm(ps, reserved)
-	_maybe_build_resource_camps(ps, reserved)
-	_maybe_train_military(ps, reserved)
-	_maybe_research_upgrades(ps, reserved)
+
+	var candidates: Array = _build_candidates(ps).filter(func(c: Dictionary) -> bool: return c.score > 0.0)
+	candidates.sort_custom(func(a: Dictionary, b: Dictionary) -> bool: return a.score > b.score)
+
+	# `reserved` accumulates as higher-scored needs go unfunded this tick, so
+	# lower-scored spending treats that portion of the stockpile as
+	# untouchable instead of greedily spending every resource the instant it
+	# arrives -- otherwise a big-ticket item would never get a chance to
+	# accumulate its cost against cheaper things ranked below it.
+	var reserved: Dictionary = {}
+	for c in candidates:
+		c.action.call(ps, reserved)
+
 	_maybe_attack(ps)
 
 
@@ -75,10 +96,18 @@ func _reserve(reserved: Dictionary, cost: Dictionary) -> void:
 		reserved[res_type] = reserved.get(res_type, 0.0) + float(cost[res_type])
 
 
+func _count_villagers(ps: PlayerState) -> int:
+	var count := 0
+	for u in ps.units:
+		if is_instance_valid(u) and u.unit_type == "villager":
+			count += 1
+	return count
+
+
 ## Villager count the AI aims to keep training. This deliberately has no
 ## hard ceiling: it reserves a fraction of population capacity for an army
 ## and puts the rest toward the workforce, so the villager (and therefore
-## farm -- see _maybe_build_farm) count keeps growing right along with
+## farm -- see _score_build_farm) count keeps growing right along with
 ## population cap instead of plateauing early. That matters most late game,
 ## once wild resources are picked over and farms carry most of the food
 ## income. Raid civs reserve a bigger army share since their income doesn't
@@ -165,15 +194,24 @@ func _find_nearest_resource(from_pos: Vector2, ps: PlayerState, filter_type: Str
 	return best
 
 
-func _maybe_train_villager(ps: PlayerState, reserved: Dictionary) -> void:
+## Scales from a high score when far behind target down toward 0 as the
+## workforce closes in, so a badly under-staffed economy outweighs almost
+## anything else, but topping off the last villager or two doesn't preempt
+## bigger needs like housing or an age advance.
+func _score_train_villager(ps: PlayerState) -> float:
+	var tc = ps.town_center()
+	if not tc or tc.train_queue.size() >= 2:
+		return 0.0
+	var target: int = _target_villagers(ps)
+	var villager_count: int = _count_villagers(ps)
+	if villager_count >= target or target <= 0:
+		return 0.0
+	return 60.0 * float(target - villager_count) / float(target)
+
+
+func _act_train_villager(ps: PlayerState, reserved: Dictionary) -> void:
 	var tc = ps.town_center()
 	if not tc:
-		return
-	var villager_count := 0
-	for u in ps.units:
-		if is_instance_valid(u) and u.unit_type == "villager":
-			villager_count += 1
-	if villager_count >= _target_villagers(ps) or tc.train_queue.size() >= 2:
 		return
 	var cost: Dictionary = GameData.get_unit_stats("villager").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
@@ -186,19 +224,22 @@ func _maybe_train_villager(ps: PlayerState, reserved: Dictionary) -> void:
 ## Villager (e.g. the Roman Aquilifer) -- not hardcoded to Romans, so this
 ## keeps working if another civ ever gets a town_center_unique too. Only
 ## keeps one of each at a time, since these are support units, not an army.
-func _maybe_train_town_center_unique(ps: PlayerState, reserved: Dictionary) -> void:
+func _score_train_town_center_unique(ps: PlayerState) -> float:
+	var tc = ps.town_center()
+	if not tc or tc.train_queue.size() >= 2:
+		return 0.0
+	for unit_type in GameData.trainable_units_for_building("town_center", ps.civ_id):
+		if unit_type != "villager" and not _has_unit(ps, unit_type):
+			return 35.0
+	return 0.0
+
+
+func _act_train_town_center_unique(ps: PlayerState, reserved: Dictionary) -> void:
 	var tc = ps.town_center()
 	if not tc:
 		return
 	for unit_type in GameData.trainable_units_for_building("town_center", ps.civ_id):
-		if unit_type == "villager":
-			continue
-		var have := false
-		for u in ps.units:
-			if is_instance_valid(u) and u.unit_type == unit_type:
-				have = true
-				break
-		if have or tc.train_queue.size() >= 2:
+		if unit_type == "villager" or _has_unit(ps, unit_type) or tc.train_queue.size() >= 2:
 			continue
 		var cost: Dictionary = GameData.get_unit_stats(unit_type).get("cost", {})
 		if _can_afford_with_reserve(ps, cost, reserved):
@@ -207,9 +248,24 @@ func _maybe_train_town_center_unique(ps: PlayerState, reserved: Dictionary) -> v
 			_reserve(reserved, cost)
 
 
-func _maybe_build_house(ps: PlayerState, reserved: Dictionary) -> void:
-	if ps.population_cap - ps.population_used > 2:
-		return
+func _has_unit(ps: PlayerState, unit_type: String) -> bool:
+	for u in ps.units:
+		if is_instance_valid(u) and u.unit_type == unit_type:
+			return true
+	return false
+
+
+## Climbs fast as population room runs out -- at 0 free slots this outranks
+## almost everything except a villager shortage severe enough to threaten
+## the whole economy.
+func _score_build_house(ps: PlayerState) -> float:
+	var room: int = ps.population_cap - ps.population_used
+	if room > 2:
+		return 0.0
+	return 70.0 - float(room) * 15.0
+
+
+func _act_build_house(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = GameData.get_building_stats("house").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		_build_building(ps, "house")
@@ -217,12 +273,20 @@ func _maybe_build_house(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
-	if not ps.building_unlocked("barracks"):
-		return
+func _has_building(ps: PlayerState, building_type: String) -> bool:
 	for b in ps.buildings:
-		if is_instance_valid(b) and b.building_type == "barracks":
-			return
+		if is_instance_valid(b) and b.building_type == building_type:
+			return true
+	return false
+
+
+func _score_build_barracks(ps: PlayerState) -> float:
+	if not ps.building_unlocked("barracks") or _has_building(ps, "barracks"):
+		return 0.0
+	return 45.0
+
+
+func _act_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = GameData.get_building_stats("barracks").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		_build_building(ps, "barracks")
@@ -230,12 +294,13 @@ func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-func _maybe_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
-	if not ps.building_unlocked("stable"):
-		return
-	for b in ps.buildings:
-		if is_instance_valid(b) and b.building_type == "stable":
-			return
+func _score_build_stable(ps: PlayerState) -> float:
+	if not ps.building_unlocked("stable") or _has_building(ps, "stable"):
+		return 0.0
+	return 45.0
+
+
+func _act_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = GameData.get_building_stats("stable").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		_build_building(ps, "stable")
@@ -243,27 +308,30 @@ func _maybe_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-## Advancing an age is the single biggest force multiplier available (it's
+## Advancing an age is one of the biggest force multipliers available (it's
 ## what unlocks Barracks/Stable/Tower, then the Fort, then every upgrade),
-## so it's checked right alongside the essential economy buildings rather
-## than left to whatever's left over after discretionary spending.
-func _maybe_advance_age(ps: PlayerState, reserved: Dictionary) -> void:
+## so its baseline score sits well above most economic upkeep -- but it
+## isn't scored at all until the current villager count clears a bar that
+## rises with age, matching "Age I is essentially all economic": a light
+## workforce before Feudal, more before Castle, and so on. Reserving a big,
+## ever-growing age-up cost (Age III alone needs 400 food) before the
+## economy can actually support it would starve villager training
+## indefinitely -- food is the resource both compete for, and villager
+## training is what makes the reservation ever payable in the first place.
+func _score_advance_age(ps: PlayerState) -> float:
 	if not ps.can_advance_age() or not ps.research_queue.is_empty():
-		return
-	# Reserving a big, ever-growing age-up cost (Age III alone needs 400
-	## food) before the economy can actually support it would starve villager
-	# training indefinitely -- food is the resource both compete for, and
-	# villager training is what makes the reservation ever payable in the
-	# first place. So aging up isn't even attempted until the current
-	# villager count clears a bar that rises with age, matching "Age I is
-	# essentially all economic" -- a light workforce before Feudal, more
-	# before Castle, and so on.
-	var villager_count := 0
-	for u in ps.units:
-		if is_instance_valid(u) and u.unit_type == "villager":
-			villager_count += 1
-	if villager_count < 5 + (ps.current_age - 1) * 2:
-		return
+		return 0.0
+	var villager_count: int = _count_villagers(ps)
+	var threshold: int = 5 + (ps.current_age - 1) * 2
+	if villager_count < threshold:
+		return 0.0
+	# The further the workforce has grown past the minimum, the more slack
+	# the economy has to spare, so it keeps climbing rather than jumping
+	# straight to "most important thing in the game" the instant it unlocks.
+	return 55.0 + float(villager_count - threshold) * 3.0
+
+
+func _act_advance_age(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = ps.next_age_cost()
 	if _can_afford_with_reserve(ps, cost, reserved):
 		ps.queue_age_advance()
@@ -271,12 +339,13 @@ func _maybe_advance_age(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-func _maybe_build_tower(ps: PlayerState, reserved: Dictionary) -> void:
-	if not ps.building_unlocked("tower"):
-		return
-	for b in ps.buildings:
-		if is_instance_valid(b) and b.building_type == "tower":
-			return
+func _score_build_tower(ps: PlayerState) -> float:
+	if not ps.building_unlocked("tower") or _has_building(ps, "tower"):
+		return 0.0
+	return 30.0
+
+
+func _act_build_tower(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = GameData.get_building_stats("tower").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		_build_building(ps, "tower")
@@ -287,13 +356,21 @@ func _maybe_build_tower(ps: PlayerState, reserved: Dictionary) -> void:
 ## Builds a Fort, or a Castle directly once forts_to_castles is researched
 ## (building_unlocked() hides "fort" and shows "castle" at that point --
 ## see BUILDING_STATS' obsoleted_by/requires_tech). Only ever wants one.
-func _maybe_build_fort(ps: PlayerState, reserved: Dictionary) -> void:
-	var building_type: String = "castle" if ps.building_unlocked("castle") else "fort"
+func _fort_or_castle_type(ps: PlayerState) -> String:
+	return "castle" if ps.building_unlocked("castle") else "fort"
+
+
+func _score_build_fort(ps: PlayerState) -> float:
+	var building_type: String = _fort_or_castle_type(ps)
 	if not ps.building_unlocked(building_type):
-		return
-	for b in ps.buildings:
-		if is_instance_valid(b) and (b.building_type == "fort" or b.building_type == "castle"):
-			return
+		return 0.0
+	if _has_building(ps, "fort") or _has_building(ps, "castle"):
+		return 0.0
+	return 40.0
+
+
+func _act_build_fort(ps: PlayerState, reserved: Dictionary) -> void:
+	var building_type: String = _fort_or_castle_type(ps)
 	var cost: Dictionary = GameData.get_building_stats(building_type).get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		_build_building(ps, building_type)
@@ -301,19 +378,35 @@ func _maybe_build_fort(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-## Opportunistic, lowest-priority research: at most one attempt per tick, so
-## it never competes with economy/army spending for more than its own cost.
-func _maybe_research_upgrades(ps: PlayerState, reserved: Dictionary) -> void:
+## Opportunistic research: never more valuable than actual army/economy
+## needs, but not worthless either -- a completed upgrade compounds for the
+## rest of the match. At most one attempt per tick either way (the act
+## function checks research_queue itself since it may have just been filled
+## by a higher-scored age advance this same tick).
+func _score_research_upgrades(ps: PlayerState) -> float:
+	if not ps.research_queue.is_empty():
+		return 0.0
+	for upgrade_id in GameData.UPGRADES.keys():
+		if _upgrade_available(ps, upgrade_id):
+			return 22.0
+	return 0.0
+
+
+func _upgrade_available(ps: PlayerState, upgrade_id: String) -> bool:
+	if ps.has_upgrade(upgrade_id):
+		return false
+	var upg: Dictionary = GameData.UPGRADES[upgrade_id]
+	if int(upg.get("required_age", 1)) > ps.current_age:
+		return false
+	var prereq: String = upg.get("requires", "")
+	return prereq == "" or ps.has_upgrade(prereq)
+
+
+func _act_research_upgrades(ps: PlayerState, reserved: Dictionary) -> void:
 	if not ps.research_queue.is_empty():
 		return
 	for upgrade_id in GameData.UPGRADES.keys():
-		if ps.has_upgrade(upgrade_id):
-			continue
-		var upg: Dictionary = GameData.UPGRADES[upgrade_id]
-		if int(upg.get("required_age", 1)) > ps.current_age:
-			continue
-		var prereq: String = upg.get("requires", "")
-		if prereq != "" and not ps.has_upgrade(prereq):
+		if not _upgrade_available(ps, upgrade_id):
 			continue
 		var cost: Dictionary = ps.upgrade_cost(upgrade_id)
 		if _can_afford_with_reserve(ps, cost, reserved):
@@ -329,18 +422,22 @@ func _maybe_research_upgrades(ps: PlayerState, reserved: Dictionary) -> void:
 ## are picked clean. Placement is biased toward a lake shore when this civ
 ## actually benefits from that (the Egyptian water bonus) -- otherwise it's
 ## just a normal spot near the Town Center, same as a House or Barracks.
-func _maybe_build_farm(ps: PlayerState, reserved: Dictionary) -> void:
+func _desired_farm_count(ps: PlayerState) -> int:
+	return int(ceil(_count_villagers(ps) / 4.0))
+
+
+func _score_build_farm(ps: PlayerState) -> float:
 	var farm_count := 0
-	var villager_count := 0
 	for b in ps.buildings:
 		if is_instance_valid(b) and b.building_type == "farm":
 			farm_count += 1
-	for u in ps.units:
-		if is_instance_valid(u) and u.unit_type == "villager":
-			villager_count += 1
-	var desired_farms: int = int(ceil(villager_count / 4.0))
-	if farm_count >= desired_farms:
-		return
+	var desired: int = _desired_farm_count(ps)
+	if farm_count >= desired:
+		return 0.0
+	return 38.0 + float(desired - farm_count) * 4.0
+
+
+func _act_build_farm(ps: PlayerState, reserved: Dictionary) -> void:
 	var cost: Dictionary = GameData.get_building_stats("farm").get("cost", {})
 	if _can_afford_with_reserve(ps, cost, reserved):
 		var tc = ps.town_center()
@@ -373,14 +470,16 @@ const RESOURCE_CAMP_TYPES := {
 }
 
 
-func _maybe_build_resource_camps(ps: PlayerState, reserved: Dictionary) -> void:
+func _score_build_resource_camps(ps: PlayerState) -> float:
 	for building_type in RESOURCE_CAMP_TYPES.keys():
-		var already_built := false
-		for b in ps.buildings:
-			if is_instance_valid(b) and b.building_type == building_type:
-				already_built = true
-				break
-		if already_built:
+		if not _has_building(ps, building_type):
+			return 25.0
+	return 0.0
+
+
+func _act_build_resource_camps(ps: PlayerState, reserved: Dictionary) -> void:
+	for building_type in RESOURCE_CAMP_TYPES.keys():
+		if _has_building(ps, building_type):
 			continue
 		var cost: Dictionary = GameData.get_building_stats(building_type).get("cost", {})
 		if not _can_afford_with_reserve(ps, cost, reserved):
@@ -456,9 +555,17 @@ func _build_building(ps: PlayerState, building_type: String, pos_override: Vecto
 const MILITARY_BUILDING_TYPES := ["barracks", "stable", "fort", "castle"]
 
 
-## Lowest priority spender: only trains with whatever's left after every
-## higher-priority need above has staked its claim on `reserved`.
-func _maybe_train_military(ps: PlayerState, reserved: Dictionary) -> void:
+## Discretionary spending: valuable, but normally ranked below the economy
+## needs above, since an idle unit trained too early is a unit the economy
+## paid for before it could really afford to.
+func _score_train_military(ps: PlayerState) -> float:
+	for b in ps.buildings:
+		if is_instance_valid(b) and MILITARY_BUILDING_TYPES.has(b.building_type) and not b.under_construction and b.train_queue.size() < 2:
+			return 20.0
+	return 0.0
+
+
+func _act_train_military(ps: PlayerState, reserved: Dictionary) -> void:
 	for b in ps.buildings:
 		if is_instance_valid(b) and MILITARY_BUILDING_TYPES.has(b.building_type) and not b.under_construction:
 			if b.train_queue.size() < 2:
