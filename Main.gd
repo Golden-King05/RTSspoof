@@ -11,10 +11,12 @@ var camera: RTSCamera
 var selection_manager: SelectionManager
 var hud: HUD
 var fog: FogOfWar
-var ai_controller: AIController
-var civ_select: CivSelectScreen
+var ai_controllers: Array = [] # Array[AIController]
+var lobby: LobbyScreen
 var main_menu: MainMenu
 var map_gen: MapGenerator
+var ground: Ground
+var _base_positions: Array = []
 
 # Debug/automation hooks, e.g.: godot --path . -- --autostart=egyptian --screenshot=out.png --quit-after-seconds=5
 var _screenshot_path: String = ""
@@ -32,22 +34,16 @@ func _ready() -> void:
 	world.name = "World"
 	add_child(world)
 
-	var ground := Ground.new()
+	ground = Ground.new()
 	ground.setup(MAP_SIZE)
 	world.add_child(ground)
 
 	var map_rng := RandomNumberGenerator.new()
 	map_rng.randomize()
 	map_gen = MapGenerator.new(MAP_SIZE, map_rng)
-	map_gen.reserve_base_area(HUMAN_START)
-	map_gen.reserve_base_area(MAP_SIZE - HUMAN_START)
-	map_gen.generate_water([
-		{"seed_world": HUMAN_START + Vector2(-160, 420), "size": 28},
-		{"seed_world": (MAP_SIZE - HUMAN_START) + Vector2(160, -420), "size": 28},
-		{"seed_world": MAP_SIZE / 2.0 + Vector2(-400, 400), "size": 55},
-	])
-	ground.set_water_cells(map_gen.water_cells, MapGenerator.TILE_SIZE)
-	GameManager.register_grid(MapGenerator.TILE_SIZE, map_gen.water_cells)
+	# Water/resource generation depends on how many bases there are, which
+	# isn't known until the lobby (or a debug --autostart) picks a lineup --
+	# see _finalize_map(), called from _build_match().
 
 	var nav_region := NavigationRegion2D.new()
 	var nav_poly := NavigationPolygon.new()
@@ -85,15 +81,15 @@ func _ready() -> void:
 func _on_play_pressed() -> void:
 	if is_instance_valid(main_menu):
 		main_menu.queue_free()
-	civ_select = CivSelectScreen.new()
-	add_child(civ_select)
-	civ_select.civ_chosen.connect(_on_civ_chosen)
+	lobby = LobbyScreen.new()
+	add_child(lobby)
+	lobby.match_configured.connect(_build_match)
 
 
 func _parse_debug_args() -> void:
 	for a in OS.get_cmdline_user_args():
 		if a.begins_with("--autostart="):
-			call_deferred("_on_civ_chosen", a.substr(len("--autostart=")))
+			call_deferred("_autostart_simple_match", a.substr(len("--autostart=")))
 		elif a.begins_with("--screenshot="):
 			_screenshot_path = a.substr(len("--screenshot="))
 		elif a.begins_with("--quit-after-seconds="):
@@ -108,6 +104,10 @@ func _parse_debug_args() -> void:
 			_forced_ai_civ = a.substr(len("--ai-civ="))
 		elif a == "--simulate":
 			call_deferred("_run_simulation")
+		elif a.begins_with("--multitest="):
+			call_deferred("_autostart_multi_test", int(a.substr(len("--multitest="))))
+		elif a == "--open-lobby":
+			call_deferred("_on_play_pressed")
 
 
 func _set_debug_camera(pos: Vector2) -> void:
@@ -279,28 +279,102 @@ func _process(delta: float) -> void:
 			get_tree().quit()
 
 
-func _on_civ_chosen(human_civ: String) -> void:
+## Classic 2-player human-vs-one-AI path used by --autostart, bypassing the
+## lobby entirely (kept for headless/regression testing).
+func _autostart_simple_match(human_civ: String) -> void:
+	var ai_civ: String = _forced_ai_civ if _forced_ai_civ != "" else GameData.random_other_civ(human_civ)
+	_build_match([
+		{"civ": human_civ, "team": 0, "is_ai": false},
+		{"civ": ai_civ, "team": 1, "is_ai": true},
+	])
+
+
+## Debug hook for exercising the N-player/team lineup path (--multitest=<n>,
+## n between 2 and GameManager.MAX_PLAYERS): 1 human + (n-1) AIs, split into
+## two alternating teams so alliances actually get tested.
+func _autostart_multi_test(count: int) -> void:
+	count = clampi(count, 2, GameManager.MAX_PLAYERS)
+	var civ_ids: Array = GameData.CIV_DATA.keys()
+	var configs: Array = []
+	for i in range(count):
+		configs.append({
+			"civ": civ_ids[i % civ_ids.size()],
+			"team": i % 2,
+			"is_ai": i != 0,
+		})
+	_build_match(configs)
+
+
+## `player_configs` is an Array of Dictionaries: {civ, team, is_ai}. Entry 0
+## is always the human. Builds the map, spawns every player's starting base,
+## and creates one AIController per non-human slot.
+func _build_match(player_configs: Array) -> void:
 	if is_instance_valid(main_menu):
 		main_menu.queue_free()
-	if is_instance_valid(civ_select):
-		civ_select.queue_free()
-	GameManager.start_match(human_civ, _forced_ai_civ)
+	if is_instance_valid(lobby):
+		lobby.queue_free()
+
+	_base_positions = _compute_base_positions(player_configs.size())
+	_finalize_map(_base_positions)
+
+	GameManager.start_match(player_configs)
 
 	fog = FogOfWar.new()
 	fog.setup(MAP_SIZE, GameManager.HUMAN_ID)
 	world.add_child(fog)
 
 	_scatter_resources()
-	_spawn_start_base(GameManager.HUMAN_ID, HUMAN_START)
-	_spawn_start_base(GameManager.AI_ID, MAP_SIZE - HUMAN_START)
+	for i in range(player_configs.size()):
+		_spawn_start_base(i, _base_positions[i])
 
-	camera.global_position = HUMAN_START
+	camera.global_position = _base_positions[GameManager.HUMAN_ID]
 
 	hud.setup(selection_manager, GameManager.HUMAN_ID)
 
-	ai_controller = AIController.new()
-	ai_controller.setup(world, GameManager.AI_ID)
-	add_child(ai_controller)
+	ai_controllers = []
+	for i in range(player_configs.size()):
+		if player_configs[i].get("is_ai", false):
+			var ai := AIController.new()
+			ai.setup(world, i)
+			add_child(ai)
+			ai_controllers.append(ai)
+
+
+## Two players keep the original fixed diagonal corners (so existing debug/
+## --simulate tooling that hardcodes HUMAN_START keeps working unchanged);
+## 3-8 players are arranged in a ring around the map center, with the human
+## always at index 0.
+func _compute_base_positions(count: int) -> Array:
+	if count <= 2:
+		var positions: Array = [HUMAN_START]
+		if count == 2:
+			positions.append(MAP_SIZE - HUMAN_START)
+		return positions
+	var center: Vector2 = MAP_SIZE / 2.0
+	var radius: float = min(MAP_SIZE.x, MAP_SIZE.y) * 0.38
+	var positions: Array = []
+	for i in range(count):
+		var ang: float = TAU * float(i) / float(count) - PI / 2.0
+		positions.append(center + Vector2(cos(ang), sin(ang)) * radius)
+	return positions
+
+
+## Carves lake tiles now that every base position is known (one lake blob
+## near each base, plus one contested lake in the map's center), and
+## registers the resulting water grid with the ground renderer + GameManager.
+func _finalize_map(base_positions: Array) -> void:
+	var center: Vector2 = MAP_SIZE / 2.0
+	for pos in base_positions:
+		map_gen.reserve_base_area(pos)
+	var lake_specs: Array = []
+	for pos in base_positions:
+		var away_from_center: Vector2 = (pos - center)
+		var offset: Vector2 = away_from_center.normalized() * 220.0 if away_from_center.length() > 1.0 else Vector2(-160, 420)
+		lake_specs.append({"seed_world": pos + offset, "size": 28})
+	lake_specs.append({"seed_world": center + Vector2(-400, 400), "size": 55})
+	map_gen.generate_water(lake_specs)
+	ground.set_water_cells(map_gen.water_cells, MapGenerator.TILE_SIZE)
+	GameManager.register_grid(MapGenerator.TILE_SIZE, map_gen.water_cells)
 
 
 func _spawn_start_base(player_id: int, pos: Vector2) -> void:
@@ -321,7 +395,7 @@ func _spawn_start_base(player_id: int, pos: Vector2) -> void:
 ## each type guaranteed near every base, the rest -- trees included, as
 ## full forests -- scattered across the whole map.
 func _scatter_resources() -> void:
-	var placements: Array = map_gen.generate_resources([HUMAN_START, MAP_SIZE - HUMAN_START])
+	var placements: Array = map_gen.generate_resources(_base_positions)
 	for p in placements:
 		var pos: Vector2 = map_gen.cell_to_world(p.cell)
 		var node := RTSResourceNode.new()

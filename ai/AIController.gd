@@ -369,7 +369,27 @@ func _maybe_attack(ps: PlayerState) -> void:
 			army.append(u)
 	if army.size() < _attack_threshold(ps):
 		return
-	var enemy: PlayerState = GameManager.get_player(GameManager.enemy_of(player_id))
+	var enemy_ids: Array = GameManager.enemies_of(player_id)
+	if enemy_ids.is_empty():
+		return
+	var home_tc: Node = ps.town_center()
+	var home: Vector2 = home_tc.global_position if home_tc else Vector2.ZERO
+	var enemy: PlayerState = null
+	var best_dist := INF
+	for eid in enemy_ids:
+		var e: PlayerState = GameManager.get_player(eid)
+		if not e:
+			continue
+		var ref_pos: Vector2 = home
+		var ref_tc: Node = e.town_center()
+		if ref_tc:
+			ref_pos = ref_tc.global_position
+		elif not e.buildings.is_empty():
+			ref_pos = e.buildings[0].global_position
+		var d: float = home.distance_squared_to(ref_pos)
+		if d < best_dist:
+			best_dist = d
+			enemy = e
 	if not enemy:
 		return
 	var target = null

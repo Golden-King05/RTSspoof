@@ -39,9 +39,13 @@ The short version, if you've done this kind of thing before:
 3. In Godot, choose **Import**, select `project.godot` from this folder,
    then **Import & Edit**.
 4. Press **Run** (F5). The game opens on a main menu; click **Play** to
-   reach the civilization-select screen.
-5. Pick a civilization to start a 1v1 match against a scripted AI opponent
-   randomly playing one of the other four.
+   reach the match setup lobby.
+5. In the lobby, pick your civilization and team on the left (click a
+   civilization's **i** button to see its bonus/unique unit), add up to 8
+   total players with **+ Add AI Player**, then **Start Match**. Players on
+   the same team are allies; the match ends when only one team has units or
+   buildings left. Game rules and map selection on the right are
+   placeholders for now -- there's only one map.
 
 ## Controls
 
@@ -137,7 +141,7 @@ autoload/              -- GameData (unit/building/civ stat tables), GameManager 
 core/                  -- camera, selection/input, fog of war, ground, map/resource generation, player economy, placement ghost
 entities/               -- Unit, Building, ResourceNode (generic, data-driven by GameData)
 ai/                     -- scripted AI opponent
-ui/                     -- main menu (with self-updater), HUD and civ-select screen
+ui/                     -- main menu (with self-updater), HUD and the match-setup lobby screen
 ```
 
 ## Publishing a new Windows build

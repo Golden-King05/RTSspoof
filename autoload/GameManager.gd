@@ -2,7 +2,8 @@ extends Node
 ## Match/player state coordinator. Autoloaded as "GameManager".
 
 const HUMAN_ID := 0
-const AI_ID := 1
+const AI_ID := 1 # id of the sole AI opponent in a classic 2-player debug match
+const MAX_PLAYERS := 8
 
 var players: Array = [] # Array[PlayerState]
 var match_started: bool = false
@@ -17,14 +18,19 @@ var water_cells: Dictionary = {} # Vector2i -> true
 const WATER_PROXIMITY_TILES := 3
 
 signal match_began
-signal game_ended(winner_id: int)
+signal game_ended(winner_team: int)
 
 
-func start_match(human_civ: String, forced_ai_civ: String = "") -> void:
-	var ai_civ: String = forced_ai_civ if forced_ai_civ != "" else GameData.random_other_civ(human_civ)
+## `player_configs` is an Array of Dictionaries: {civ: String, team: int,
+## is_ai: bool}. Index in the array doubles as player_id, so entry 0 is
+## always the human-controlled slot (the lobby screen enforces this).
+func start_match(player_configs: Array) -> void:
 	players = []
-	players.append(PlayerState.new(HUMAN_ID, human_civ, false))
-	players.append(PlayerState.new(AI_ID, ai_civ, true))
+	for i in range(player_configs.size()):
+		var cfg: Dictionary = player_configs[i]
+		var ps := PlayerState.new(i, cfg["civ"], cfg.get("is_ai", i != 0))
+		ps.team = int(cfg.get("team", i))
+		players.append(ps)
 	match_started = true
 	game_over = false
 	match_began.emit()
@@ -78,16 +84,45 @@ func get_player(player_id: int) -> PlayerState:
 	return null
 
 
+## True when `a` and `b` are both known players on different teams. Teams
+## are plain ints assigned in the lobby; same team = allies.
+func is_enemy(a: int, b: int) -> bool:
+	var pa: PlayerState = get_player(a)
+	var pb: PlayerState = get_player(b)
+	if pa == null or pb == null or a == b:
+		return false
+	return pa.team != pb.team
+
+
+## All currently-living enemy players of `player_id` (different team, and
+## still has at least one unit or building).
+func enemies_of(player_id: int) -> Array:
+	var result: Array = []
+	for p in players:
+		if is_enemy(player_id, p.player_id) and (not p.units.is_empty() or not p.buildings.is_empty()):
+			result.append(p.player_id)
+	return result
+
+
+## Legacy single-enemy accessor, still relied on by the debug/--simulate code
+## paths that only ever run with exactly one human and one AI.
 func enemy_of(player_id: int) -> int:
+	for p in players:
+		if p.player_id != player_id:
+			return p.player_id
 	return AI_ID if player_id == HUMAN_ID else HUMAN_ID
 
 
 func check_defeat() -> void:
-	if game_over or not match_started:
+	if game_over or not match_started or players.is_empty():
 		return
+	var alive_teams: Dictionary = {}
 	for p in players:
-		if p.buildings.is_empty() and p.units.is_empty():
-			game_over = true
-			var winner: int = enemy_of(p.player_id)
-			game_ended.emit(winner)
-			return
+		if not p.buildings.is_empty() or not p.units.is_empty():
+			alive_teams[p.team] = true
+	if alive_teams.size() <= 1:
+		game_over = true
+		var winner_team: int = -1
+		if alive_teams.size() == 1:
+			winner_team = alive_teams.keys()[0]
+		game_ended.emit(winner_team)

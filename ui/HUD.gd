@@ -188,9 +188,14 @@ func _add_button(text: String, callback: Callable) -> void:
 	_action_box.add_child(btn)
 
 
-func _on_game_ended(winner_id: int) -> void:
+func _on_game_ended(winner_team: int) -> void:
 	_game_over_label.visible = true
-	if winner_id == player_id:
+	var ps: PlayerState = GameManager.get_player(player_id)
+	var my_team: int = ps.team if ps else -1
+	if winner_team == -1:
+		_game_over_label.text = "DRAW"
+		_game_over_label.modulate = Color(0.9, 0.9, 0.9)
+	elif winner_team == my_team:
 		_game_over_label.text = "VICTORY!"
 		_game_over_label.modulate = Color(0.35, 1.0, 0.35)
 	else:

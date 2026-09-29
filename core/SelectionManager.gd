@@ -193,7 +193,7 @@ func _handle_right_click(world_pos: Vector2) -> void:
 		return
 	var picked = _find_entity_at(world_pos)
 
-	if picked != null and (picked.type == "unit" or picked.type == "building") and picked.node.player_id != GameManager.HUMAN_ID:
+	if picked != null and (picked.type == "unit" or picked.type == "building") and GameManager.is_enemy(GameManager.HUMAN_ID, picked.node.player_id):
 		for u in selected_units:
 			if not is_instance_valid(u):
 				continue

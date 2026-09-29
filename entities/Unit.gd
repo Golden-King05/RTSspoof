@@ -399,7 +399,7 @@ func die() -> void:
 func _draw() -> void:
 	var civ: Dictionary = GameData.get_civ_data(civ_id)
 	var col: Color = civ.get("color", Color.WHITE)
-	if player_id == GameManager.AI_ID:
+	if player_id != GameManager.HUMAN_ID:
 		col = col.darkened(0.15)
 
 	# body

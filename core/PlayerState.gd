@@ -5,6 +5,7 @@ class_name PlayerState
 var player_id: int
 var civ_id: String
 var is_ai: bool = false
+var team: int = 0
 
 var resources: Dictionary = {"wood": 0, "food": 0, "gold": 0, "stone": 0}
 var population_used: int = 0
