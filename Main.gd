@@ -14,6 +14,7 @@ var fog: FogOfWar
 var ai_controller: AIController
 var civ_select: CivSelectScreen
 var main_menu: MainMenu
+var map_gen: MapGenerator
 
 # Debug/automation hooks, e.g.: godot --path . -- --autostart=egyptian --screenshot=out.png --quit-after-seconds=5
 var _screenshot_path: String = ""
@@ -35,13 +36,18 @@ func _ready() -> void:
 	ground.setup(MAP_SIZE)
 	world.add_child(ground)
 
-	var water_regions: Array = [
-		{"center": HUMAN_START + Vector2(-160, 420), "radius": 120.0},
-		{"center": (MAP_SIZE - HUMAN_START) + Vector2(160, -420), "radius": 120.0},
-		{"center": MAP_SIZE / 2.0 + Vector2(-400, 400), "radius": 150.0},
-	]
-	ground.add_water_regions(water_regions)
-	GameManager.register_water_regions(water_regions)
+	var map_rng := RandomNumberGenerator.new()
+	map_rng.randomize()
+	map_gen = MapGenerator.new(MAP_SIZE, map_rng)
+	map_gen.reserve_base_area(HUMAN_START)
+	map_gen.reserve_base_area(MAP_SIZE - HUMAN_START)
+	map_gen.generate_water([
+		{"seed_world": HUMAN_START + Vector2(-160, 420), "size": 28},
+		{"seed_world": (MAP_SIZE - HUMAN_START) + Vector2(160, -420), "size": 28},
+		{"seed_world": MAP_SIZE / 2.0 + Vector2(-400, 400), "size": 55},
+	])
+	ground.set_water_cells(map_gen.water_cells, MapGenerator.TILE_SIZE)
+	GameManager.register_grid(MapGenerator.TILE_SIZE, map_gen.water_cells)
 
 	var nav_region := NavigationRegion2D.new()
 	var nav_poly := NavigationPolygon.new()
@@ -151,8 +157,7 @@ func _run_simulation() -> void:
 	print("[sim] final unit count=", ps.units.size())
 
 	# Water-gated gather bonus sanity check (should only matter for Egyptians).
-	var lake_center: Vector2 = HUMAN_START + Vector2(-160, 420)
-	var near_water_pos: Vector2 = lake_center + Vector2(200, 0) # inside the 160px margin outside the lake's 120 radius
+	var near_water_pos: Vector2 = GameManager.find_land_near_water(HUMAN_START)
 	var far_pos: Vector2 = HUMAN_START + Vector2(1200, 1200) # nowhere near any lake
 	print("[sim] is_near_water(near)=", GameManager.is_near_water(near_water_pos), " is_near_water(far)=", GameManager.is_near_water(far_pos))
 	print("[sim] %s gather_multiplier(food, near_water)=%s far=%s" % [ps.civ_id, ps.gather_multiplier("food", near_water_pos), ps.gather_multiplier("food", far_pos)])
@@ -257,30 +262,14 @@ func _spawn_start_base(player_id: int, pos: Vector2) -> void:
 		v.setup("villager", player_id)
 
 
+## Resources are grown as grid-aligned clumps (see MapGenerator): one of
+## each type guaranteed near every base, the rest -- trees included, as
+## full forests -- scattered across the whole map.
 func _scatter_resources() -> void:
-	_place_cluster("tree", 6, HUMAN_START + Vector2(140, -220), 90.0)
-	_place_cluster("tree", 6, (MAP_SIZE - HUMAN_START) + Vector2(-140, 220), 90.0)
-
-	_place_cluster("gold_mine", 2, HUMAN_START + Vector2(220, 160), 50.0)
-	_place_cluster("gold_mine", 2, (MAP_SIZE - HUMAN_START) + Vector2(-220, -160), 50.0)
-
-	_place_cluster("stone_mine", 2, HUMAN_START + Vector2(-40, 220), 50.0)
-	_place_cluster("stone_mine", 2, (MAP_SIZE - HUMAN_START) + Vector2(40, -220), 50.0)
-
-	_place_cluster("berry_bush", 3, HUMAN_START + Vector2(200, 20), 60.0)
-	_place_cluster("berry_bush", 3, (MAP_SIZE - HUMAN_START) + Vector2(-200, -20), 60.0)
-
-	var mid: Vector2 = MAP_SIZE / 2.0
-	_place_cluster("tree", 10, mid, 260.0)
-	_place_cluster("gold_mine", 3, mid + Vector2(180, -120), 100.0)
-	_place_cluster("stone_mine", 3, mid + Vector2(-180, 120), 100.0)
-
-
-func _place_cluster(type_id: String, count: int, center: Vector2, spread: float) -> void:
-	for i in range(count):
-		var offset := Vector2(randf_range(-spread, spread), randf_range(-spread, spread))
-		var pos: Vector2 = (center + offset).clamp(Vector2(60, 60), MAP_SIZE - Vector2(60, 60))
+	var placements: Array = map_gen.generate_resources([HUMAN_START, MAP_SIZE - HUMAN_START])
+	for p in placements:
+		var pos: Vector2 = map_gen.cell_to_world(p.cell)
 		var node := RTSResourceNode.new()
 		world.add_child(node)
 		node.global_position = pos
-		node.setup(type_id)
+		node.setup(p.type)

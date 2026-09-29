@@ -8,12 +8,13 @@ var players: Array = [] # Array[PlayerState]
 var match_started: bool = false
 var game_over: bool = false
 
-## Water bodies for the current map, as {"center": Vector2, "radius": float}.
-## Registered by Main.gd once the map is generated; queried by
-## PlayerState.gather_multiplier() for water-adjacency bonuses (e.g. the
-## Egyptian farm bonus).
-var water_regions: Array = []
-const WATER_PROXIMITY_MARGIN := 160.0
+## Water tile grid for the current map. Registered by Main.gd once the map
+## is generated (see MapGenerator); queried by PlayerState.gather_multiplier()
+## for water-adjacency bonuses (e.g. the Egyptian farm bonus) and by the AI
+## for farm placement.
+var grid_tile_size: float = 60.0
+var water_cells: Dictionary = {} # Vector2i -> true
+const WATER_PROXIMITY_TILES := 3
 
 signal match_began
 signal game_ended(winner_id: int)
@@ -29,15 +30,46 @@ func start_match(human_civ: String, forced_ai_civ: String = "") -> void:
 	match_began.emit()
 
 
-func register_water_regions(regions: Array) -> void:
-	water_regions = regions
+func register_grid(tile_size: float, cells: Dictionary) -> void:
+	grid_tile_size = tile_size
+	water_cells = cells
+
+
+func world_to_cell(pos: Vector2) -> Vector2i:
+	return Vector2i(int(floor(pos.x / grid_tile_size)), int(floor(pos.y / grid_tile_size)))
+
+
+func cell_to_world(cell: Vector2i) -> Vector2:
+	return Vector2((cell.x + 0.5) * grid_tile_size, (cell.y + 0.5) * grid_tile_size)
 
 
 func is_near_water(pos: Vector2) -> bool:
-	for region in water_regions:
-		if pos.distance_to(region.center) <= region.radius + WATER_PROXIMITY_MARGIN:
-			return true
+	var c: Vector2i = world_to_cell(pos)
+	for dy in range(-WATER_PROXIMITY_TILES, WATER_PROXIMITY_TILES + 1):
+		for dx in range(-WATER_PROXIMITY_TILES, WATER_PROXIMITY_TILES + 1):
+			if water_cells.has(Vector2i(c.x + dx, c.y + dy)):
+				return true
 	return false
+
+
+## Spirals outward from `from_pos` to find the nearest non-water tile that
+## still counts as "near water" -- lets the AI place a farm for the water
+## bonus without needing to know lake geometry. Returns Vector2.INF if none
+## is found within range.
+func find_land_near_water(from_pos: Vector2, max_radius_cells: int = 25) -> Vector2:
+	var start: Vector2i = world_to_cell(from_pos)
+	for r in range(1, max_radius_cells):
+		for dy in range(-r, r + 1):
+			for dx in range(-r, r + 1):
+				if max(abs(dx), abs(dy)) != r:
+					continue
+				var c := Vector2i(start.x + dx, start.y + dy)
+				if water_cells.has(c):
+					continue
+				var pos: Vector2 = cell_to_world(c)
+				if is_near_water(pos):
+					return pos
+	return Vector2.INF
 
 
 func get_player(player_id: int) -> PlayerState:

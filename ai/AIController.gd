@@ -92,24 +92,64 @@ func _attack_threshold(ps: PlayerState) -> int:
 	return max(3, int(round(threshold)))
 
 
+## Resource clumps are now scattered at randomized distances/angles (see
+## MapGenerator) rather than the old fixed layout, which happened to always
+## put berries closest to a base and so kept a trickle of food coming in "by
+## accident". Picking the globally nearest resource regardless of type can
+## now leave a whole resource starved for a long stretch if that type just
+## happens to be farthest this game. Instead, always steer new idle
+## villagers toward whichever type currently has the fewest gatherers, so
+## coverage stays roughly balanced across wood/food/gold/stone.
 func _assign_idle_villagers(ps: PlayerState) -> void:
+	var gather_counts: Dictionary = {"wood": 0, "food": 0, "gold": 0, "stone": 0}
+	for u in ps.units:
+		if is_instance_valid(u) and u.unit_type == "villager" and u.state == RTSUnit.State.GATHER and is_instance_valid(u.gather_node):
+			var rt: String = u.gather_node.resource_type
+			gather_counts[rt] = gather_counts.get(rt, 0) + 1
+
 	for u in ps.units:
 		if is_instance_valid(u) and u.unit_type == "villager" and u.state == RTSUnit.State.IDLE:
-			var node = _find_nearest_resource(u.global_position)
+			var target_type: String = _least_covered_resource_type(gather_counts)
+			var node = _find_nearest_resource(u.global_position, ps, target_type)
+			if node == null:
+				node = _find_nearest_resource(u.global_position, ps, "")
 			if node:
 				u.order_gather(node)
+				gather_counts[node.resource_type] = gather_counts.get(node.resource_type, 0) + 1
 
 
-func _find_nearest_resource(from_pos: Vector2):
+func _least_covered_resource_type(counts: Dictionary) -> String:
+	var best_type: String = "wood"
+	var best_count: int = 999999
+	for t in counts.keys():
+		if counts[t] < best_count:
+			best_count = counts[t]
+			best_type = t
+	return best_type
+
+
+## Searches wild resource nodes and, for food, this player's own finished
+## Farms too (farms are buildings, not in the "resources" group, but are
+## just as valid a gather target). `filter_type` == "" means any type.
+func _find_nearest_resource(from_pos: Vector2, ps: PlayerState, filter_type: String = ""):
 	var best = null
 	var best_d := INF
 	for r in get_tree().get_nodes_in_group("resources") as Array:
-		if not is_instance_valid(r):
+		if not is_instance_valid(r) or r.is_depleted():
+			continue
+		if filter_type != "" and r.resource_type != filter_type:
 			continue
 		var d: float = from_pos.distance_to(r.global_position)
 		if d < best_d:
 			best_d = d
 			best = r
+	if filter_type == "" or filter_type == "food":
+		for b in ps.buildings:
+			if is_instance_valid(b) and b.is_farm and not b.under_construction and not b.is_depleted():
+				var d: float = from_pos.distance_to(b.global_position)
+				if d < best_d:
+					best_d = d
+					best = b
 	return best
 
 
@@ -178,23 +218,15 @@ func _maybe_build_farm(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
-## Returns a build spot near the nearest lake shore if this civ has a
-## water-gathering bonus for food and a lake exists; otherwise a normal
-## random spot near `base_pos`, same style as House/Barracks placement.
+## Returns a build spot near the nearest water tile if this civ has a
+## water-gathering bonus for food; otherwise a normal random spot near
+## `base_pos`, same style as House/Barracks placement.
 func _pick_farm_position(ps: PlayerState, base_pos: Vector2) -> Vector2:
 	var civ: Dictionary = ps.civ_data()
-	if civ.get("water_gather_bonus", {}).has("food") and not GameManager.water_regions.is_empty():
-		var best_region = null
-		var best_d := INF
-		for region in GameManager.water_regions:
-			var d: float = base_pos.distance_to(region.center)
-			if d < best_d:
-				best_d = d
-				best_region = region
-		if best_region != null:
-			var angle: float = randf() * TAU
-			var dist_from_center: float = best_region.radius + GameManager.WATER_PROXIMITY_MARGIN * 0.5
-			return best_region.center + Vector2(cos(angle), sin(angle)) * dist_from_center
+	if civ.get("water_gather_bonus", {}).has("food"):
+		var near_water_pos: Vector2 = GameManager.find_land_near_water(base_pos)
+		if is_finite(near_water_pos.x):
+			return near_water_pos
 	return base_pos + Vector2(randf_range(-160, 160), randf_range(-160, 160))
 
 

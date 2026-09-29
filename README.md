@@ -81,8 +81,12 @@ best raiders since they cross that threshold quickest.
 
 ## Feature scope (core prototype)
 
-- Procedurally drawn top-down map with scattered resources (wood, food,
-  gold, stone), impassable lakes, and contested resources in the middle.
+- A tile-grid map (`core/MapGenerator.gd`): lakes are carved as blob-shaped
+  groups of whole grid tiles rather than smooth circles, and every resource
+  spawns as a grid-aligned clump grown outward from a seed tile -- trees
+  grow into full forests, gold/stone/berries into smaller clumps. One clump
+  of each resource type is guaranteed near every base; the rest, forests
+  included, are scattered across the whole map.
 - Villagers that gather resources and construct buildings; Town Center,
   House, Barracks and buildable Farm buildings; a population cap economy.
 - NavigationAgent2D pathfinding with avoidance around units/buildings.
@@ -109,7 +113,7 @@ or campaign.
 Main.gd / Main.tscn   -- wires the whole match together (no other scenes;
                           all units/buildings/UI are built procedurally)
 autoload/              -- GameData (unit/building/civ stat tables), GameManager (match/player state)
-core/                  -- camera, selection/input, fog of war, ground, player economy, placement ghost
+core/                  -- camera, selection/input, fog of war, ground, map/resource generation, player economy, placement ghost
 entities/               -- Unit, Building, ResourceNode (generic, data-driven by GameData)
 ai/                     -- scripted AI opponent
 ui/                     -- main menu (with self-updater), HUD and civ-select screen
