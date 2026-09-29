@@ -108,6 +108,38 @@ const UNIT_STATS := {
 		"aura_debuff_on_death": {"armor": -2, "attack": -3, "attack_speed_mult": 0.8},
 		"aura_debuff_duration": 600.0,
 	},
+	## Every civ's starting unit -- one spawns alongside the villagers at the
+	## very beginning of the match (see Main.gd's _spawn_start_base) -- and
+	## also trainable at the Stable once built. Weak and cheap on purpose:
+	## fast enough to scout the map and harass an enemy's villagers early,
+	## but not meant to hold its own in a real fight.
+	"scout": {
+		"display_name": "Scout",
+		"max_hp": 35, "attack": 5, "armor": 0, "attack_range": 16.0,
+		"move_speed": 165.0, "attack_cooldown": 1.4, "is_ranged": false,
+		"cost": {"food": 50, "gold": 15}, "train_time": 16.0, "pop_cost": 1,
+		"radius": 10.0, "vision_range": 260.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "",
+		"can_build": false, "can_gather": false,
+	},
+	"cavalry": {
+		"display_name": "Cavalry",
+		"max_hp": 65, "attack": 9, "armor": 1, "attack_range": 16.0,
+		"move_speed": 130.0, "attack_cooldown": 1.1, "is_ranged": false,
+		"cost": {"food": 70, "gold": 50}, "train_time": 26.0, "pop_cost": 1,
+		"radius": 12.0, "vision_range": 170.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "",
+		"can_build": false, "can_gather": false,
+	},
+	"horse_archer": {
+		"display_name": "Horse Archer",
+		"max_hp": 40, "attack": 6, "armor": 0, "attack_range": 130.0,
+		"move_speed": 135.0, "attack_cooldown": 1.5, "is_ranged": true,
+		"cost": {"wood": 30, "gold": 55}, "train_time": 28.0, "pop_cost": 1,
+		"radius": 10.0, "vision_range": 180.0,
+		"gather_rate": 0.0, "carry_capacity": 0, "civ_only": "",
+		"can_build": false, "can_gather": false,
+	},
 }
 
 ## Building stat table.
@@ -130,6 +162,13 @@ const BUILDING_STATS := {
 		"display_name": "Barracks",
 		"max_hp": 300, "cost": {"wood": 120}, "build_time": 35.0,
 		"provides_pop": 0, "can_train": ["militia", "archer"],
+		"drop_off_types": [], "radius": 40.0, "vision_range": 160.0,
+		"raid_resource": "wood",
+	},
+	"stable": {
+		"display_name": "Stable",
+		"max_hp": 280, "cost": {"wood": 140}, "build_time": 32.0,
+		"provides_pop": 0, "can_train": ["scout", "cavalry", "horse_archer"],
 		"drop_off_types": [], "radius": 40.0, "vision_range": 160.0,
 		"raid_resource": "wood",
 	},
@@ -175,8 +214,8 @@ const CIV_DATA := {
 		"house_pop_bonus": 0,
 		"ranged_range_bonus": 1.0,
 		"unique_unit": "war_chariot",
-		"barracks_unique": true,
-		"bonus_text": "Villagers gather Food 20% faster near water. Start with +50 Gold. Unique Unit: War Chariot.",
+		"unique_unit_building": "stable",
+		"bonus_text": "Villagers gather Food 20% faster near water. Start with +50 Gold. Unique Unit: War Chariot (Stable).",
 	},
 	"british": {
 		"display_name": "British",
@@ -186,7 +225,7 @@ const CIV_DATA := {
 		"house_pop_bonus": 5,
 		"ranged_range_bonus": 1.2,
 		"unique_unit": "longbowman",
-		"barracks_unique": true,
+		"unique_unit_building": "barracks",
 		"bonus_text": "Houses support +5 extra Population. Archers fire 20% farther. Unique Unit: Longbowman.",
 	},
 	"achaemenid": {
@@ -198,7 +237,7 @@ const CIV_DATA := {
 		"ranged_range_bonus": 1.0,
 		"move_speed_bonus": 1.15,
 		"unique_unit": "immortal",
-		"barracks_unique": true,
+		"unique_unit_building": "barracks",
 		"bonus_text": "All units move 15% faster. Start with +100 Gold. Unique Unit: Immortal.",
 	},
 	"viking": {
@@ -210,7 +249,7 @@ const CIV_DATA := {
 		"ranged_range_bonus": 1.0,
 		"raid_bonus": {"damage_per_chunk": 10.0, "resource_per_chunk": 1.0, "gold_per_chunk": 0.5},
 		"unique_unit": "berserker",
-		"barracks_unique": true,
+		"unique_unit_building": "barracks",
 		"bonus_text": "Raiding: every 10 damage dealt to an enemy building loots 1 Wood/Stone (by building type) + 0.5 Gold. Start with +40 Wood. Unique Unit: Berserker.",
 	},
 	"roman": {
@@ -223,7 +262,7 @@ const CIV_DATA := {
 		"construction_speed_bonus": 1.3,
 		"building_hp_bonus": 1.2,
 		"unique_unit": "legionary",
-		"barracks_unique": true,
+		"unique_unit_building": "barracks",
 		"town_center_unique": "aquilifer",
 		"bonus_text": "Buildings are constructed 30% faster and have 20% more HP. Start with +30 Stone. Unique Units: Legionary (Barracks), Aquilifer (Town Center).",
 	},
@@ -279,13 +318,10 @@ static func unit_available_for_civ(unit_type: String, civ_id: String) -> bool:
 	return restriction == "" or restriction == civ_id
 
 
-## `barracks_unique`/`unique_unit` and `town_center_unique` are two
-## independent slots -- a civ can have a Barracks-trained unique unit, a
-## Town-Center-trained one, both, or neither. Note `town_center_unique`
-## holds a unit-type *string* directly (unlike `barracks_unique`, which is
-## just a bool paired with the separate `unique_unit` key) -- don't try to
-## generalize these into one `"<building>_unique"` lookup, since
-## `"barracks_unique"` is already taken as that bool flag's exact key name.
+## `unique_unit`/`unique_unit_building` and `town_center_unique` are two
+## independent slots -- a civ can have one regular unique unit (trained at
+## whichever building `unique_unit_building` names, e.g. "barracks" or
+## "stable") plus a separate Town-Center-trained one, both, or neither.
 static func trainable_units_for_building(building_type: String, civ_id: String) -> Array:
 	var stats: Dictionary = get_building_stats(building_type)
 	var result: Array = []
@@ -293,10 +329,9 @@ static func trainable_units_for_building(building_type: String, civ_id: String) 
 		if unit_available_for_civ(unit_type, civ_id):
 			result.append(unit_type)
 	var civ: Dictionary = get_civ_data(civ_id)
-	if building_type == "barracks" and civ.get("barracks_unique", false):
-		var unique_unit: String = civ.get("unique_unit", "")
-		if unique_unit != "" and not result.has(unique_unit):
-			result.append(unique_unit)
+	var unique_unit: String = civ.get("unique_unit", "")
+	if unique_unit != "" and civ.get("unique_unit_building", "barracks") == building_type and not result.has(unique_unit):
+		result.append(unique_unit)
 	if building_type == "town_center":
 		var tc_unique: String = civ.get("town_center_unique", "")
 		if tc_unique != "" and not result.has(tc_unique):

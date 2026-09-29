@@ -21,10 +21,20 @@ func setup(sel_mgr: SelectionManager, p_player_id: int) -> void:
 	var ps: PlayerState = GameManager.get_player(player_id)
 	if ps:
 		ps.resources_changed.connect(_refresh_resources)
+		ps.resources_changed.connect(_refresh_affordability)
 		ps.population_changed.connect(_refresh_resources)
 	_build_ui()
 	_refresh_resources()
 	_refresh_panel()
+
+
+## Re-tints the currently shown action buttons red/normal as resources
+## change, without rebuilding the whole panel (which would also interrupt
+## an open tooltip).
+func _refresh_affordability() -> void:
+	for c in _action_box.get_children():
+		if c is CostButton:
+			c.refresh_afford_state()
 
 
 func _build_ui() -> void:
@@ -131,11 +141,12 @@ func _show_unit_actions(units: Array) -> void:
 			can_build_any = true
 			break
 	if can_build_any:
-		const BUILDABLE_TYPES := ["house", "barracks", "farm", "lumberjack", "mine_camp", "windmill"]
+		const BUILDABLE_TYPES := ["house", "barracks", "stable", "farm", "lumberjack", "mine_camp", "windmill"]
 		for building_type in BUILDABLE_TYPES:
 			var stats: Dictionary = GameData.get_building_stats(building_type)
 			var captured_type: String = building_type
-			_add_button("Build %s (%s)" % [stats.get("display_name", building_type), _cost_str(stats.get("cost", {}))], func() -> void: selection_manager.start_placement(captured_type))
+			var build_cost: Dictionary = stats.get("cost", {})
+			_add_button("Build %s (%s)" % [stats.get("display_name", building_type), _cost_str(build_cost)], func() -> void: selection_manager.start_placement(captured_type), build_cost)
 
 
 func _show_building_actions(building) -> void:
@@ -167,9 +178,10 @@ func _show_building_actions(building) -> void:
 	for unit_type in trainable:
 		var captured_type: String = unit_type
 		var u_stats: Dictionary = GameData.get_unit_stats(captured_type)
-		var label_text: String = "Train %s (%s)" % [u_stats.get("display_name", captured_type), _cost_str(u_stats.get("cost", {}))]
+		var train_cost: Dictionary = u_stats.get("cost", {})
+		var label_text: String = "Train %s (%s)" % [u_stats.get("display_name", captured_type), _cost_str(train_cost)]
 		var captured_building = building
-		_add_button(label_text, func() -> void: captured_building.queue_train(captured_type))
+		_add_button(label_text, func() -> void: captured_building.queue_train(captured_type), train_cost)
 
 
 func _cost_str(cost: Dictionary) -> String:
@@ -181,8 +193,17 @@ func _cost_str(cost: Dictionary) -> String:
 	return ", ".join(parts)
 
 
-func _add_button(text: String, callback: Callable) -> void:
-	var btn := Button.new()
+func _add_button(text: String, callback: Callable, cost: Dictionary = {}) -> void:
+	var btn: Button
+	if cost.is_empty():
+		btn = Button.new()
+	else:
+		var cb := CostButton.new()
+		cb.cost = cost
+		cb.player_state = GameManager.get_player(player_id)
+		cb.tooltip_text = "Cost: %s" % _cost_str(cost)
+		cb.refresh_afford_state()
+		btn = cb
 	btn.text = text
 	btn.pressed.connect(callback)
 	_action_box.add_child(btn)

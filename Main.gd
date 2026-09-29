@@ -216,6 +216,24 @@ func _run_simulation() -> void:
 	await get_tree().create_timer(0.5).timeout
 	print("[sim] wood after depositing at lumberjack: ", ps.resources.wood, " (expect +7 from ", wood_before, ")")
 
+	# Stable test: every civ can train Scout/Cavalry/Horse Archer there, and
+	# Egyptians specifically get the War Chariot moved there off the Barracks.
+	var stable := RTSBuilding.new()
+	world.add_child(stable)
+	stable.global_position = HUMAN_START + Vector2(-300, -300)
+	stable.setup("stable", GameManager.HUMAN_ID, false)
+	var stable_options: Array = GameData.trainable_units_for_building("stable", ps.civ_id)
+	print("[sim] stable trainable for %s: %s" % [ps.civ_id, stable_options])
+	print("[sim] stable offers scout/cavalry/horse_archer: ", stable_options.has("scout") and stable_options.has("cavalry") and stable_options.has("horse_archer"), " (expect true)")
+	if ps.civ_id == "egyptian":
+		print("[sim] egyptian war_chariot trainable at stable: ", stable_options.has("war_chariot"), " (expect true)")
+		print("[sim] egyptian war_chariot NOT trainable at barracks: ", not GameData.trainable_units_for_building("barracks", ps.civ_id).has("war_chariot"), " (expect true)")
+	ps.resources.gold += 500
+	ps.resources.food += 500
+	var gold_before: float = ps.resources.gold
+	var queued: bool = stable.queue_train("scout")
+	print("[sim] queued scout at stable: ", queued, " gold spent=", gold_before - ps.resources.gold, " queue_size=", stable.train_queue.size())
+
 	# Aquilifer aura test (Roman-only mechanic): a nearby soldier should be
 	# buffed while it lives, debuffed the instant it dies, and the debuff
 	# should expire on its own after aura_debuff_duration seconds.
@@ -389,6 +407,13 @@ func _spawn_start_base(player_id: int, pos: Vector2) -> void:
 		var ang: float = TAU * float(i) / 3.0
 		v.global_position = pos + Vector2(cos(ang), sin(ang)) * 70.0
 		v.setup("villager", player_id)
+
+	# Every civ starts the match with one Scout already on the field, ready
+	# to explore and harass before a Stable is even built.
+	var scout := RTSUnit.new()
+	world.add_child(scout)
+	scout.global_position = pos + Vector2(90, -90)
+	scout.setup("scout", player_id)
 
 
 ## Resources are grown as grid-aligned clumps (see MapGenerator): one of

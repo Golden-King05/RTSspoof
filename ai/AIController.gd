@@ -43,6 +43,7 @@ func _think() -> void:
 	_maybe_train_town_center_unique(ps, reserved)
 	_maybe_build_house(ps, reserved)
 	_maybe_build_barracks(ps, reserved)
+	_maybe_build_stable(ps, reserved)
 	_maybe_build_farm(ps, reserved)
 	_maybe_build_resource_camps(ps, reserved)
 	_maybe_train_military(ps, reserved)
@@ -218,6 +219,17 @@ func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
 		_reserve(reserved, cost)
 
 
+func _maybe_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
+	for b in ps.buildings:
+		if is_instance_valid(b) and b.building_type == "stable":
+			return
+	var cost: Dictionary = GameData.get_building_stats("stable").get("cost", {})
+	if _can_afford_with_reserve(ps, cost, reserved):
+		_build_building(ps, "stable")
+	else:
+		_reserve(reserved, cost)
+
+
 ## Keeps roughly one Farm per four villagers, with no upper limit -- as the
 ## workforce grows (see _target_villagers), so does the farm count, which is
 ## what keeps food income scaling into the late game once wild resources
@@ -346,13 +358,16 @@ func _build_building(ps: PlayerState, building_type: String, pos_override: Vecto
 	builder.order_construct(b)
 
 
+const MILITARY_BUILDING_TYPES := ["barracks", "stable"]
+
+
 ## Lowest priority spender: only trains with whatever's left after every
 ## higher-priority need above has staked its claim on `reserved`.
 func _maybe_train_military(ps: PlayerState, reserved: Dictionary) -> void:
 	for b in ps.buildings:
-		if is_instance_valid(b) and b.building_type == "barracks" and not b.under_construction:
+		if is_instance_valid(b) and MILITARY_BUILDING_TYPES.has(b.building_type) and not b.under_construction:
 			if b.train_queue.size() < 2:
-				var options: Array = GameData.trainable_units_for_building("barracks", ps.civ_id)
+				var options: Array = GameData.trainable_units_for_building(b.building_type, ps.civ_id)
 				options = options.filter(func(unit_type: String) -> bool:
 					var cost: Dictionary = GameData.get_unit_stats(unit_type).get("cost", {})
 					return _can_afford_with_reserve(ps, cost, reserved)

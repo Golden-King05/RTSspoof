@@ -58,18 +58,21 @@ The short version, if you've done this kind of thing before:
   - on your own unfinished building → help construct
 - **WASD / arrow keys** or moving the mouse to the screen edge → pan the
   camera. **Mouse wheel** → zoom.
-- Select villagers to reveal build buttons (House, Barracks, Farm,
+- Select villagers to reveal build buttons (House, Barracks, Stable, Farm,
   Lumberjack, Mine, Windmill) in the bottom panel; click one, then
   left-click on the map to place it (**Esc** or right-click cancels
-  placement). Select a Town Center or Barracks to see its training
+  placement). Select a Town Center, Barracks or Stable to see its training
   options, a Farm to see its remaining food, or a Lumberjack/Mine/Windmill
   to see which resource(s) it accepts.
+- Any build/train button you can't currently afford is tinted red; hover
+  it to see the exact cost, with whichever resource(s) you're short on
+  also shown in red.
 
 ## Civilizations
 
 | Civ | Bonus | Unique Unit |
 |---|---|---|
-| Egyptians | Villagers gather Food 20% faster from farms/bushes built near water; start with +50 Gold | War Chariot (fast melee) |
+| Egyptians | Villagers gather Food 20% faster from farms/bushes built near water; start with +50 Gold | War Chariot (fast melee, Stable) |
 | British | Houses support +5 extra population; archers fire 20% farther | Longbowman (long-range archer) |
 | Achaemenids | All units move 15% faster; start with +100 Gold | Immortal (elite heavy infantry) |
 | Vikings | Raiding: every 10 damage dealt to an enemy building loots 1 Wood or Stone (by building type) + 0.5 Gold; start with +40 Wood | Berserker (fast, hard-hitting melee) |
@@ -105,11 +108,18 @@ one behind the front line rather than leading with it.
   of each resource type is guaranteed near every base; the rest, forests
   included, are scattered across the whole map.
 - Villagers that gather resources and construct buildings; Town Center,
-  House, Barracks and Farm, plus resource-specific depots -- Lumberjack
-  Camp (wood), Mine (stone + gold) and Windmill (food) -- that let
-  villagers drop off close to a resource cluster instead of walking all
-  the way back to the Town Center (which still accepts everything). A
+  House, Barracks, Stable and Farm, plus resource-specific depots --
+  Lumberjack Camp (wood), Mine (stone + gold) and Windmill (food) -- that
+  let villagers drop off close to a resource cluster instead of walking
+  all the way back to the Town Center (which still accepts everything). A
   population cap economy ties it together.
+- Every civ starts the match with a **Scout** already on the field (fast,
+  wide vision, moderate damage but low HP -- built for early exploring and
+  harassing enemy villagers, not standing toe-to-toe in a real fight), and
+  can train more of them plus **Cavalry** (a tankier melee horseman) and
+  **Horse Archer** (fast ranged cavalry) at the Stable once it's built. The
+  Egyptian War Chariot unique unit trains at the Stable too, not the
+  Barracks.
 - NavigationAgent2D pathfinding with avoidance around units/buildings.
 - Melee/ranged combat with HP, armor and attack cooldowns.
 - Grid-based fog of war (unexplored / explored / visible) for the human
@@ -195,3 +205,7 @@ godot --path . -- --autostart=british --simulate --screenshot=out.png --quit-aft
 - `--screenshot=<path>` saves a PNG when the run ends.
 - `--quit-after-seconds=<n>` ends the run after n seconds.
 - `--camera=<x>,<y>` repositions the camera (useful with `--screenshot`).
+- `--open-lobby` opens the match-setup lobby directly, skipping the main menu.
+- `--multitest=<n>` (2-8) starts an n-player match (1 human + n-1 AI) split
+  across two alternating teams, for exercising the multiplayer/team code
+  path headlessly.
