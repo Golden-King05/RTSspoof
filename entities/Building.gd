@@ -23,6 +23,14 @@ var _start_hp_fraction: float = 0.1
 
 var train_queue: Array = [] # Array of {"unit_type": String, "time_left": float, "total_time": float}
 
+# Defensive buildings (Tower, Fort, Castle) auto-attack the nearest enemy
+# unit in range every attack_cooldown seconds -- see _process_attack(). Zero
+# attack (the default, and every other building type) just skips it.
+var attack: float = 0.0
+var attack_range: float = 0.0
+var attack_cooldown: float = 1.0
+var _attack_timer: float = 0.0
+
 # Farm-only: once built, a farm acts like a resource node (villagers gather
 # food from it directly) rather than training anything.
 var is_farm: bool = false
@@ -51,6 +59,9 @@ func setup(p_building_type: String, p_player_id: int, start_under_construction: 
 	drop_off_types = stats.get("drop_off_types", [])
 	build_time = max(stats.get("build_time", 10.0), 0.01) / (ps.construction_speed_multiplier() if ps else 1.0)
 	can_train = GameData.trainable_units_for_building(building_type, civ_id)
+	attack = stats.get("attack", 0.0)
+	attack_range = stats.get("attack_range", 0.0)
+	attack_cooldown = max(stats.get("attack_cooldown", 1.0), 0.1)
 
 	is_farm = stats.get("is_farm", false)
 	if is_farm:
@@ -85,15 +96,54 @@ func add_build_progress(delta: float) -> void:
 
 
 func _process(delta: float) -> void:
-	if under_construction or train_queue.is_empty():
+	if under_construction:
 		return
-	var entry: Dictionary = train_queue[0]
-	entry.time_left -= delta
-	train_queue[0] = entry
-	if entry.time_left <= 0.0:
-		train_queue.pop_front()
-		_spawn_unit(entry.unit_type)
-	queue_redraw()
+	if not train_queue.is_empty():
+		var entry: Dictionary = train_queue[0]
+		entry.time_left -= delta
+		train_queue[0] = entry
+		if entry.time_left <= 0.0:
+			train_queue.pop_front()
+			_spawn_unit(entry.unit_type)
+		queue_redraw()
+	if attack > 0.0:
+		_process_attack(delta)
+
+
+## Auto-fires at the nearest enemy unit in range, using the same damage
+## formula as a unit's own _deal_damage() (Unit.gd) -- armor-mitigated,
+## floored at 1 -- for a defensive building like a Tower/Fort/Castle.
+func _process_attack(delta: float) -> void:
+	_attack_timer -= delta
+	if _attack_timer > 0.0:
+		return
+	var target = _find_target_in_range()
+	if target == null:
+		return
+	_attack_timer = attack_cooldown
+	var target_armor: float = target.effective_armor() if target.has_method("effective_armor") else float(target.armor)
+	var dmg: float = max(1.0, attack - target_armor)
+	target.hp -= dmg
+	target.queue_redraw()
+	if target.has_method("on_damaged"):
+		target.on_damaged(dmg, self)
+	if target.hp <= 0.0 and target.has_method("die"):
+		target.die()
+
+
+func _find_target_in_range():
+	var best = null
+	var best_d := INF
+	for u in get_tree().get_nodes_in_group("units"):
+		if not is_instance_valid(u) or u.hp <= 0.0:
+			continue
+		if not GameManager.is_enemy(player_id, u.player_id):
+			continue
+		var d: float = global_position.distance_to(u.global_position)
+		if d <= attack_range + u.radius and d < best_d:
+			best_d = d
+			best = u
+	return best
 
 
 func queue_train(unit_type: String) -> bool:
@@ -176,6 +226,29 @@ func die() -> void:
 	died.emit(self)
 	GameManager.check_defeat()
 	queue_free()
+
+
+## Called by PlayerState._convert_forts_to_castles() once "forts_to_castles"
+## finishes researching. Mutates this Fort into a Castle in place (more HP,
+## a stronger attack, wider train roster) rather than despawning and
+## respawning it -- neither provides_pop nor house_pop_bonus applies to
+## either building type, so population_cap doesn't need touching.
+func convert_to_castle() -> void:
+	if building_type != "fort":
+		return
+	building_type = "castle"
+	var ps: PlayerState = GameManager.get_player(player_id)
+	var stats: Dictionary = GameData.get_building_stats("castle")
+	max_hp = stats.get("max_hp", max_hp) * (ps.building_hp_multiplier() if ps else 1.0)
+	hp = min(hp, max_hp)
+	radius = stats.get("radius", radius)
+	vision_range = stats.get("vision_range", vision_range)
+	drop_off_types = stats.get("drop_off_types", [])
+	can_train = GameData.trainable_units_for_building("castle", civ_id)
+	attack = stats.get("attack", attack)
+	attack_range = stats.get("attack_range", attack_range)
+	attack_cooldown = max(stats.get("attack_cooldown", attack_cooldown), 0.1)
+	queue_redraw()
 
 
 func _draw() -> void:

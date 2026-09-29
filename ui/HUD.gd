@@ -7,6 +7,7 @@ var player_id: int = 0
 
 var _res_labels: Dictionary = {}
 var _pop_label: Label
+var _age_label: Label
 var _action_box: HBoxContainer
 var _info_label: Label
 var _bonus_label: Label
@@ -23,6 +24,7 @@ func setup(sel_mgr: SelectionManager, p_player_id: int) -> void:
 		ps.resources_changed.connect(_refresh_resources)
 		ps.resources_changed.connect(_refresh_affordability)
 		ps.population_changed.connect(_refresh_resources)
+		ps.tech_changed.connect(_on_tech_changed)
 	_build_ui()
 	_refresh_resources()
 	_refresh_panel()
@@ -35,6 +37,15 @@ func _refresh_affordability() -> void:
 	for c in _action_box.get_children():
 		if c is CostButton:
 			c.refresh_afford_state()
+
+
+## An age advance or upgrade finished: the age display needs updating and
+## the action panel may have newly-unlocked (or now-researched) buttons to
+## show, so this one does warrant a full panel rebuild unlike a plain
+## resource tick.
+func _on_tech_changed() -> void:
+	_refresh_resources()
+	_refresh_panel()
 
 
 func _build_ui() -> void:
@@ -57,6 +68,10 @@ func _build_ui() -> void:
 	_pop_label = Label.new()
 	_pop_label.add_theme_font_size_override("font_size", 18)
 	hbox.add_child(_pop_label)
+	_age_label = Label.new()
+	_age_label.add_theme_font_size_override("font_size", 18)
+	_age_label.modulate = Color(0.85, 0.85, 1.0)
+	hbox.add_child(_age_label)
 
 	_bonus_label = Label.new()
 	_bonus_label.add_theme_font_size_override("font_size", 13)
@@ -111,6 +126,13 @@ func _refresh_resources() -> void:
 		var lbl: Label = _res_labels[res_type]
 		lbl.text = "%s: %d" % [String(res_type).capitalize(), int(ps.resources[res_type])]
 	_pop_label.text = "Pop: %d / %d" % [ps.population_used, ps.population_cap]
+	var age_name: String = GameData.AGES.get(ps.current_age, {}).get("display_name", "Age %d" % ps.current_age)
+	if not ps.research_queue.is_empty():
+		var entry: Dictionary = ps.research_queue[0]
+		var researching: String = ("Age %s" % entry["id"]) if entry["kind"] == "age" else GameData.UPGRADES.get(entry["id"], {}).get("display_name", entry["id"])
+		_age_label.text = "%s (researching %s, %ds)" % [age_name, researching, int(entry["time_left"])]
+	else:
+		_age_label.text = age_name
 
 
 func _refresh_panel() -> void:
@@ -141,12 +163,28 @@ func _show_unit_actions(units: Array) -> void:
 			can_build_any = true
 			break
 	if can_build_any:
-		const BUILDABLE_TYPES := ["house", "barracks", "stable", "farm", "lumberjack", "mine_camp", "windmill"]
+		var ps: PlayerState = GameManager.get_player(player_id)
+		const BUILDABLE_TYPES := ["house", "barracks", "stable", "tower", "fort", "castle", "farm", "lumberjack", "mine_camp", "windmill"]
 		for building_type in BUILDABLE_TYPES:
 			var stats: Dictionary = GameData.get_building_stats(building_type)
+			# A tech-gated building (Castle) stays hidden until its tech is
+			# researched, and one superseded by a researched tech (Fort, once
+			# forts_to_castles is done) stays hidden too -- neither is a
+			# meaningful choice to preview the way an age requirement is.
+			var req_tech: String = stats.get("requires_tech", "")
+			if req_tech != "" and (not ps or not ps.has_upgrade(req_tech)):
+				continue
+			var obsoleted_by: String = stats.get("obsoleted_by", "")
+			if obsoleted_by != "" and ps and ps.has_upgrade(obsoleted_by):
+				continue
+			var required_age: int = int(stats.get("required_age", 1))
+			var display_name: String = stats.get("display_name", building_type)
+			if ps and required_age > ps.current_age:
+				_add_locked_button("Build %s (Requires %s)" % [display_name, GameData.AGES.get(required_age, {}).get("display_name", "Age %d" % required_age)])
+				continue
 			var captured_type: String = building_type
 			var build_cost: Dictionary = stats.get("cost", {})
-			_add_button("Build %s (%s)" % [stats.get("display_name", building_type), _cost_str(build_cost)], func() -> void: selection_manager.start_placement(captured_type), build_cost)
+			_add_button("Build %s (%s)" % [display_name, _cost_str(build_cost)], func() -> void: selection_manager.start_placement(captured_type), build_cost)
 
 
 func _show_building_actions(building) -> void:
@@ -183,6 +221,36 @@ func _show_building_actions(building) -> void:
 		var captured_building = building
 		_add_button(label_text, func() -> void: captured_building.queue_train(captured_type), train_cost)
 
+	if building.building_type == "town_center":
+		_show_age_and_research_buttons(ps)
+
+
+## Aging up and civ-wide upgrades are both researched at the Town Center --
+## there's no separate Blacksmith/University building in this prototype, so
+## it doubles as the whole tech tree's hub. Only one research runs at a
+## time (see PlayerState.research_queue), so while one's in progress this
+## just shows its remaining time instead of more buttons to queue.
+func _show_age_and_research_buttons(ps: PlayerState) -> void:
+	if not ps.research_queue.is_empty():
+		return
+	if ps.can_advance_age():
+		var next_age: int = ps.current_age + 1
+		var age_name: String = GameData.AGES.get(next_age, {}).get("display_name", "Age %d" % next_age)
+		var cost: Dictionary = ps.next_age_cost()
+		_add_button("Advance to %s (%s)" % [age_name, _cost_str(cost)], func() -> void: ps.queue_age_advance(), cost)
+	for upgrade_id in GameData.UPGRADES.keys():
+		if ps.has_upgrade(upgrade_id):
+			continue
+		var upg: Dictionary = GameData.UPGRADES[upgrade_id]
+		if int(upg.get("required_age", 1)) > ps.current_age:
+			continue
+		var prereq: String = upg.get("requires", "")
+		if prereq != "" and not ps.has_upgrade(prereq):
+			continue
+		var captured_id: String = upgrade_id
+		var cost: Dictionary = ps.upgrade_cost(upgrade_id)
+		_add_button("Research %s (%s)" % [upg.get("display_name", upgrade_id), _cost_str(cost)], func() -> void: ps.queue_upgrade(captured_id), cost)
+
 
 func _cost_str(cost: Dictionary) -> String:
 	var parts: Array = []
@@ -206,6 +274,17 @@ func _add_button(text: String, callback: Callable, cost: Dictionary = {}) -> voi
 		btn = cb
 	btn.text = text
 	btn.pressed.connect(callback)
+	_action_box.add_child(btn)
+
+
+## An action that isn't available yet for a reason other than affordability
+## (an age requirement) -- grayed out and inert, distinct from a CostButton's
+## red "can't afford this right now" styling.
+func _add_locked_button(text: String) -> void:
+	var btn := Button.new()
+	btn.text = text
+	btn.disabled = true
+	btn.modulate = Color(0.55, 0.55, 0.55)
 	_action_box.add_child(btn)
 
 

@@ -234,6 +234,96 @@ func _run_simulation() -> void:
 	var queued: bool = stable.queue_train("scout")
 	print("[sim] queued scout at stable: ", queued, " gold spent=", gold_before - ps.resources.gold, " queue_size=", stable.train_queue.size())
 
+	# Ages test: a Barracks can't even start placement before Age II, and
+	# advancing actually costs resources and takes real research_time (ticked
+	# by GameManager._process) rather than applying instantly.
+	print("[sim] age test: current_age=", ps.current_age, " barracks_unlocked=", ps.building_unlocked("barracks"), " (expect 1, false)")
+	selection_manager.start_placement("barracks")
+	print("[sim] start_placement(barracks) pre-Age-II build_mode=", selection_manager.build_mode, " (expect false)")
+	ps.resources.food += 1000
+	ps.resources.wood += 1000
+	var advance_queued: bool = ps.queue_age_advance()
+	print("[sim] queued age advance: ", advance_queued, " (expect true)")
+	await get_tree().create_timer(GameData.AGES[2].advance_time + 0.5).timeout
+	print("[sim] after waiting: current_age=", ps.current_age, " barracks_unlocked=", ps.building_unlocked("barracks"), " (expect 2, true)")
+	selection_manager.start_placement("barracks")
+	print("[sim] start_placement(barracks) at Age II build_mode=", selection_manager.build_mode, " (expect true)")
+	selection_manager.cancel_placement()
+
+	# Upgrades test: a flat combat bonus applies to every non-villager unit
+	# immediately once researched (already proved the real-time queue above
+	# with the age advance, so this jumps straight to Age IV to keep the test
+	# from waiting through every intermediate age).
+	ps.current_age = 4
+	var upgrade_target: RTSUnit = RTSUnit.new()
+	world.add_child(upgrade_target)
+	upgrade_target.setup("militia", GameManager.HUMAN_ID)
+	print("[sim] before iron_weapons: eff_attack=", upgrade_target.effective_attack(), " (base=", upgrade_target.attack, ")")
+	ps.researched_upgrades.append("iron_weapons")
+	print("[sim] after iron_weapons: eff_attack=", upgrade_target.effective_attack(), " (expect base+1)")
+
+	# Forts -> Castles test: the retroactive Stone surcharge should be
+	# exactly (existing Fort count) * (a fresh Castle's Stone cost / 2), on
+	# top of the upgrade's own flat cost, and every existing Fort should
+	# convert into a Castle once it finishes researching.
+	for i in range(5):
+		var fort := RTSBuilding.new()
+		world.add_child(fort)
+		fort.global_position = HUMAN_START + Vector2(250 + i * 70, -250)
+		fort.setup("fort", GameManager.HUMAN_ID, false)
+	var castle_stone_cost: float = float(GameData.get_building_stats("castle").get("cost", {}).get("stone", 0.0))
+	var base_stone_cost: float = float(GameData.UPGRADES["forts_to_castles"].get("cost", {}).get("stone", 0.0))
+	var expected_stone_cost: float = base_stone_cost + 5.0 * (castle_stone_cost / 2.0)
+	print("[sim] forts_to_castles cost stone=", ps.upgrade_cost("forts_to_castles").get("stone", 0.0), " expected=", expected_stone_cost)
+	ps.resources.gold += 2000
+	ps.resources.stone += 2000
+	var upgrade_queued: bool = ps.queue_upgrade("forts_to_castles")
+	print("[sim] queued forts_to_castles: ", upgrade_queued, " (expect true)")
+	await get_tree().create_timer(float(GameData.UPGRADES["forts_to_castles"].research_time) + 0.5).timeout
+	var forts_left := 0
+	var castles_gained := 0
+	for b in ps.buildings:
+		if is_instance_valid(b):
+			if b.building_type == "fort":
+				forts_left += 1
+			elif b.building_type == "castle":
+				castles_gained += 1
+	print("[sim] after forts_to_castles: forts=", forts_left, " castles=", castles_gained, " (expect 0, 5)")
+	print("[sim] castle_unlocked=", ps.building_unlocked("castle"), " fort_unlocked=", ps.building_unlocked("fort"), " (expect true, false)")
+
+	# Defensive auto-attack test: a freshly converted Castle should hit an
+	# enemy unit that wanders into its attack_range on its own, no orders
+	# needed -- same for a plain Tower.
+	var target_castle = null
+	for b in ps.buildings:
+		if is_instance_valid(b) and b.building_type == "castle":
+			target_castle = b
+			break
+	var intruder: RTSUnit = RTSUnit.new()
+	world.add_child(intruder)
+	intruder.global_position = target_castle.global_position + Vector2(target_castle.attack_range - 20.0, 0)
+	intruder.setup("militia", GameManager.enemy_of(GameManager.HUMAN_ID))
+	var intruder_hp_before: float = intruder.hp
+	# The 5 freshly-converted Castles sit close together (see the retroactive-
+	# cost test above), so more than one can reach the same spot -- the
+	# intruder may well die outright, which still proves the mechanic works.
+	await get_tree().create_timer(target_castle.attack_cooldown + 0.5).timeout
+	var intruder_hp_after: String = str(intruder.hp) if is_instance_valid(intruder) else "dead"
+	print("[sim] castle auto-attack: intruder hp ", intruder_hp_before, " -> ", intruder_hp_after, " (expect lower or dead)")
+
+	var tower := RTSBuilding.new()
+	world.add_child(tower)
+	tower.global_position = HUMAN_START + Vector2(-250, 250)
+	tower.setup("tower", GameManager.HUMAN_ID, false)
+	var intruder2: RTSUnit = RTSUnit.new()
+	world.add_child(intruder2)
+	intruder2.global_position = tower.global_position + Vector2(tower.attack_range - 20.0, 0)
+	intruder2.setup("militia", GameManager.enemy_of(GameManager.HUMAN_ID))
+	var intruder2_hp_before: float = intruder2.hp
+	await get_tree().create_timer(tower.attack_cooldown + 0.5).timeout
+	var intruder2_hp_after: String = str(intruder2.hp) if is_instance_valid(intruder2) else "dead"
+	print("[sim] tower auto-attack: intruder hp ", intruder2_hp_before, " -> ", intruder2_hp_after, " (expect lower or dead)")
+
 	# Aquilifer aura test (Roman-only mechanic): a nearby soldier should be
 	# buffed while it lives, debuffed the instant it dies, and the debuff
 	# should expire on its own after aura_debuff_duration seconds.
@@ -284,8 +374,11 @@ func _process(delta: float) -> void:
 						if b.building_type == "farm":
 							note = "@water" if GameManager.is_near_water(b.global_position) else "@land"
 						building_types.append(b.building_type + note)
-				print("[t=%.0f] P%d(%s) res=%s pop=%d/%d units=%d buildings=%s" % [
-					_elapsed, p.player_id, p.civ_id, p.resources, p.population_used, p.population_cap,
+				var researching: String = ""
+				if not p.research_queue.is_empty():
+					researching = " researching=%s(%ds)" % [p.research_queue[0]["id"], int(p.research_queue[0]["time_left"])]
+				print("[t=%.0f] P%d(%s) age=%d%s res=%s pop=%d/%d units=%d buildings=%s" % [
+					_elapsed, p.player_id, p.civ_id, p.current_age, researching, p.resources, p.population_used, p.population_cap,
 					p.units.size(), building_types
 				])
 	if _quit_after_seconds > 0.0:

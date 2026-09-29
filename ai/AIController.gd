@@ -39,14 +39,23 @@ func _think() -> void:
 	# a chance to accumulate its cost.
 	var reserved: Dictionary = {}
 	_assign_idle_villagers(ps)
+	# Aging up is checked before even villager training claims anything, or
+	# its reservation would never actually hold onto enough to afford the
+	# advance -- villager training alone can absorb food indefinitely (the
+	# target keeps rising with population cap), so left any later in the
+	# order it would starve the age-up forever rather than just slow it.
+	_maybe_advance_age(ps, reserved)
 	_maybe_train_villager(ps, reserved)
 	_maybe_train_town_center_unique(ps, reserved)
 	_maybe_build_house(ps, reserved)
 	_maybe_build_barracks(ps, reserved)
 	_maybe_build_stable(ps, reserved)
+	_maybe_build_tower(ps, reserved)
+	_maybe_build_fort(ps, reserved)
 	_maybe_build_farm(ps, reserved)
 	_maybe_build_resource_camps(ps, reserved)
 	_maybe_train_military(ps, reserved)
+	_maybe_research_upgrades(ps, reserved)
 	_maybe_attack(ps)
 
 
@@ -209,6 +218,8 @@ func _maybe_build_house(ps: PlayerState, reserved: Dictionary) -> void:
 
 
 func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
+	if not ps.building_unlocked("barracks"):
+		return
 	for b in ps.buildings:
 		if is_instance_valid(b) and b.building_type == "barracks":
 			return
@@ -220,6 +231,8 @@ func _maybe_build_barracks(ps: PlayerState, reserved: Dictionary) -> void:
 
 
 func _maybe_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
+	if not ps.building_unlocked("stable"):
+		return
 	for b in ps.buildings:
 		if is_instance_valid(b) and b.building_type == "stable":
 			return
@@ -228,6 +241,86 @@ func _maybe_build_stable(ps: PlayerState, reserved: Dictionary) -> void:
 		_build_building(ps, "stable")
 	else:
 		_reserve(reserved, cost)
+
+
+## Advancing an age is the single biggest force multiplier available (it's
+## what unlocks Barracks/Stable/Tower, then the Fort, then every upgrade),
+## so it's checked right alongside the essential economy buildings rather
+## than left to whatever's left over after discretionary spending.
+func _maybe_advance_age(ps: PlayerState, reserved: Dictionary) -> void:
+	if not ps.can_advance_age() or not ps.research_queue.is_empty():
+		return
+	# Reserving a big, ever-growing age-up cost (Age III alone needs 400
+	## food) before the economy can actually support it would starve villager
+	# training indefinitely -- food is the resource both compete for, and
+	# villager training is what makes the reservation ever payable in the
+	# first place. So aging up isn't even attempted until the current
+	# villager count clears a bar that rises with age, matching "Age I is
+	# essentially all economic" -- a light workforce before Feudal, more
+	# before Castle, and so on.
+	var villager_count := 0
+	for u in ps.units:
+		if is_instance_valid(u) and u.unit_type == "villager":
+			villager_count += 1
+	if villager_count < 5 + (ps.current_age - 1) * 2:
+		return
+	var cost: Dictionary = ps.next_age_cost()
+	if _can_afford_with_reserve(ps, cost, reserved):
+		ps.queue_age_advance()
+	else:
+		_reserve(reserved, cost)
+
+
+func _maybe_build_tower(ps: PlayerState, reserved: Dictionary) -> void:
+	if not ps.building_unlocked("tower"):
+		return
+	for b in ps.buildings:
+		if is_instance_valid(b) and b.building_type == "tower":
+			return
+	var cost: Dictionary = GameData.get_building_stats("tower").get("cost", {})
+	if _can_afford_with_reserve(ps, cost, reserved):
+		_build_building(ps, "tower")
+	else:
+		_reserve(reserved, cost)
+
+
+## Builds a Fort, or a Castle directly once forts_to_castles is researched
+## (building_unlocked() hides "fort" and shows "castle" at that point --
+## see BUILDING_STATS' obsoleted_by/requires_tech). Only ever wants one.
+func _maybe_build_fort(ps: PlayerState, reserved: Dictionary) -> void:
+	var building_type: String = "castle" if ps.building_unlocked("castle") else "fort"
+	if not ps.building_unlocked(building_type):
+		return
+	for b in ps.buildings:
+		if is_instance_valid(b) and (b.building_type == "fort" or b.building_type == "castle"):
+			return
+	var cost: Dictionary = GameData.get_building_stats(building_type).get("cost", {})
+	if _can_afford_with_reserve(ps, cost, reserved):
+		_build_building(ps, building_type)
+	else:
+		_reserve(reserved, cost)
+
+
+## Opportunistic, lowest-priority research: at most one attempt per tick, so
+## it never competes with economy/army spending for more than its own cost.
+func _maybe_research_upgrades(ps: PlayerState, reserved: Dictionary) -> void:
+	if not ps.research_queue.is_empty():
+		return
+	for upgrade_id in GameData.UPGRADES.keys():
+		if ps.has_upgrade(upgrade_id):
+			continue
+		var upg: Dictionary = GameData.UPGRADES[upgrade_id]
+		if int(upg.get("required_age", 1)) > ps.current_age:
+			continue
+		var prereq: String = upg.get("requires", "")
+		if prereq != "" and not ps.has_upgrade(prereq):
+			continue
+		var cost: Dictionary = ps.upgrade_cost(upgrade_id)
+		if _can_afford_with_reserve(ps, cost, reserved):
+			ps.queue_upgrade(upgrade_id)
+		else:
+			_reserve(reserved, cost)
+		return
 
 
 ## Keeps roughly one Farm per four villagers, with no upper limit -- as the
@@ -328,6 +421,8 @@ func _find_nearest_resource_of_types(ps: PlayerState, types: Array):
 
 
 func _build_building(ps: PlayerState, building_type: String, pos_override: Vector2 = Vector2.INF) -> void:
+	if not ps.building_unlocked(building_type):
+		return
 	# Prefer an idle villager; otherwise pull one off gathering duty -- but
 	# never steal a villager that is already constructing something else,
 	# or two buildings queued in the same think tick would fight over one
@@ -358,7 +453,7 @@ func _build_building(ps: PlayerState, building_type: String, pos_override: Vecto
 	builder.order_construct(b)
 
 
-const MILITARY_BUILDING_TYPES := ["barracks", "stable"]
+const MILITARY_BUILDING_TYPES := ["barracks", "stable", "fort", "castle"]
 
 
 ## Lowest priority spender: only trains with whatever's left after every

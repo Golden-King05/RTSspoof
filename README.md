@@ -58,12 +58,15 @@ The short version, if you've done this kind of thing before:
   - on your own unfinished building → help construct
 - **WASD / arrow keys** or moving the mouse to the screen edge → pan the
   camera. **Mouse wheel** → zoom.
-- Select villagers to reveal build buttons (House, Barracks, Stable, Farm,
-  Lumberjack, Mine, Windmill) in the bottom panel; click one, then
-  left-click on the map to place it (**Esc** or right-click cancels
-  placement). Select a Town Center, Barracks or Stable to see its training
-  options, a Farm to see its remaining food, or a Lumberjack/Mine/Windmill
-  to see which resource(s) it accepts.
+- Select villagers to reveal build buttons (House, Barracks, Stable, Tower,
+  Fort/Castle, Farm, Lumberjack, Mine, Windmill) in the bottom panel; click
+  one, then left-click on the map to place it (**Esc** or right-click
+  cancels placement) -- buildings not yet unlocked for your current age
+  show grayed out instead. Select a Town Center, Barracks, Stable or
+  Fort/Castle to see its training options, a Farm to see its remaining
+  food, or a Lumberjack/Mine/Windmill to see which resource(s) it accepts.
+  The Town Center also lists **Advance to Age...** and **Research...**
+  buttons -- see "Ages" below.
 - Any build/train button you can't currently afford is tinted red; hover
   it to see the exact cost, with whichever resource(s) you're short on
   also shown in red.
@@ -98,6 +101,35 @@ everyone who was in range instead takes the same bonus in reverse (a
 morale-break debuff, shown as a thin dark-red ring) for 10 minutes. Losing
 your standard bearer mid-fight is a real setback, so it's worth keeping
 one behind the front line rather than leading with it.
+
+## Ages
+
+Every match starts in **Age I: Dark Age**, which is deliberately all
+economy -- Town Center, House, Farm and the resource depots, nothing else.
+Select your Town Center to advance, paying its cost and waiting its
+research time (both shown on the button; the age label next to Population
+in the top bar shows what's currently researching and how long is left):
+
+| Age | Unlocks |
+|---|---|
+| I: Dark Age | Economy only (starting age) |
+| II: Feudal Age | Barracks, Stable, and the **Watch Tower** (a defensive building that auto-attacks any enemy unit that wanders into range) |
+| III: Castle Age | The **Fort** (trains Militia plus this civ's Barracks-trained unique unit, if it's melee -- e.g. the Roman Legionary, not the ranged British Longbowman), plus a tier of combat upgrades (**Iron Weapons**, **Reinforced Armor**) |
+| IV: Imperial Age | A second upgrade tier (**Steel Weapons**, **Plate Armor**), plus the **Forts -> Castles** upgrade |
+
+Upgrades are also researched at the Town Center once their age is reached,
+and apply immediately to every unit you already have as well as every one
+you train afterward. **Forts -> Castles** is a building upgrade, not a
+stat bonus: once researched, every Fort you own instantly becomes a
+Castle (more HP, a stronger attack), and all *future* construction builds
+a Castle directly -- Stone instead of Wood from then on. Because your
+existing Forts get upgraded for free, the tech's own cost scales with how
+many you already have: it charges extra Stone equal to half a fresh
+Castle's Stone cost, for every Fort you own, on top of its own flat cost
+(five Forts and a 50-Stone Castle, for example, would mean +125 Stone).
+The scripted AI opponent goes through all of this on its own -- it won't
+even attempt to save for the next age until its economy (villager count)
+can support it without stalling everything else.
 
 ## Feature scope (core prototype)
 
@@ -137,10 +169,13 @@ one behind the front line rather than leading with it.
   Lumberjack/Mine/Windmill each next to whichever matching resource cluster
   sits closest to home once it can afford to, and trains one Town-Center
   unique unit (e.g. a Roman Aquilifer) alongside its villagers if its civ
-  has one.
+  has one. It also works its way through the ages on its own -- advancing,
+  building a Tower and a Fort (later a Castle) once each unlocks, and
+  researching combat upgrades opportunistically -- without ever letting
+  the next age's cost crowd out the villager growth needed to afford it.
 
-This is a vertical-slice prototype, not a full game: no tech tree, ages,
-or campaign.
+This is a vertical-slice prototype, not a full game: no full tech tree
+beyond the ages/upgrades above, and no campaign.
 
 ## Project layout
 

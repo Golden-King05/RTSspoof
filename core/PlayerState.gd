@@ -14,8 +14,22 @@ var population_cap: int = 0
 var units: Array = []
 var buildings: Array = []
 
+var current_age: int = 1
+var researched_upgrades: Array = [] # Array[String] of GameData.UPGRADES keys
+## At most one entry: {"kind": "age"|"upgrade", "id": String, "time_left":
+## float, "total_time": float}. Ticked every frame by GameManager (a Node,
+## unlike this RefCounted class) via tick_research() -- see
+## GameManager._process(). Only one research at a time, matching the single
+## train_queue slot buildings already use.
+var research_queue: Array = []
+
 signal resources_changed
 signal population_changed
+## Fired when an age-advance or upgrade finishes researching -- the HUD
+## refreshes its build/train panel and age display off this rather than
+## resources_changed, since aging up unlocks buildings without necessarily
+## changing any resource total.
+signal tech_changed
 
 
 func _init(p_id: int, p_civ: String, p_is_ai: bool) -> void:
@@ -144,3 +158,124 @@ func nearest_dropoff(from_pos: Vector2, resource_type: String) -> Node:
 			best_dist = d
 			best = b
 	return best
+
+
+## True if `building_type` is buildable right now: its age requirement is
+## met, any tech it requires (e.g. the Castle needing forts_to_castles) has
+## been researched, and it hasn't been superseded by one that has (e.g. the
+## Fort, once forts_to_castles is done).
+func building_unlocked(building_type: String) -> bool:
+	var stats: Dictionary = GameData.get_building_stats(building_type)
+	if int(stats.get("required_age", 1)) > current_age:
+		return false
+	var req_tech: String = stats.get("requires_tech", "")
+	if req_tech != "" and not has_upgrade(req_tech):
+		return false
+	var obsoleted_by: String = stats.get("obsoleted_by", "")
+	if obsoleted_by != "" and has_upgrade(obsoleted_by):
+		return false
+	return true
+
+
+func can_advance_age() -> bool:
+	return current_age < GameData.MAX_AGE
+
+
+func next_age_cost() -> Dictionary:
+	if not can_advance_age():
+		return {}
+	return GameData.AGES.get(current_age + 1, {}).get("advance_cost", {})
+
+
+func has_upgrade(upgrade_id: String) -> bool:
+	return researched_upgrades.has(upgrade_id)
+
+
+## Flat bonus to `stat` ("attack" or "armor") from every upgrade this player
+## has researched -- read by Unit.effective_attack()/effective_armor() for
+## every unit except villagers.
+func upgrade_bonus(stat: String) -> float:
+	var total := 0.0
+	for upg_id in researched_upgrades:
+		var upg: Dictionary = GameData.UPGRADES.get(upg_id, {})
+		total += float(upg.get("effect", {}).get(stat, 0.0))
+	return total
+
+
+## `forts_to_castles`'s Stone cost scales with how many Forts this player
+## already owns: half a fresh Castle's Stone cost, per existing Fort, on
+## top of the upgrade's flat base cost (e.g. 5 Forts and a 50-Stone Castle
+## cost means +125 Stone). Every other upgrade just returns its flat cost.
+func upgrade_cost(upgrade_id: String) -> Dictionary:
+	var upg: Dictionary = GameData.UPGRADES.get(upgrade_id, {})
+	var cost: Dictionary = upg.get("cost", {}).duplicate()
+	if upgrade_id == "forts_to_castles":
+		var fort_count := 0
+		for b in buildings:
+			if is_instance_valid(b) and b.building_type == "fort":
+				fort_count += 1
+		var castle_stone_cost: float = float(GameData.get_building_stats("castle").get("cost", {}).get("stone", 0.0))
+		cost["stone"] = float(cost.get("stone", 0.0)) + fort_count * (castle_stone_cost / 2.0)
+	return cost
+
+
+func queue_age_advance() -> bool:
+	if not can_advance_age() or not research_queue.is_empty():
+		return false
+	var cost: Dictionary = next_age_cost()
+	if not can_afford(cost):
+		return false
+	spend(cost)
+	var next_age: int = current_age + 1
+	var advance_time: float = float(GameData.AGES.get(next_age, {}).get("advance_time", 30.0))
+	research_queue.append({"kind": "age", "id": str(next_age), "time_left": advance_time, "total_time": advance_time})
+	return true
+
+
+func queue_upgrade(upgrade_id: String) -> bool:
+	if has_upgrade(upgrade_id) or not research_queue.is_empty():
+		return false
+	var upg: Dictionary = GameData.UPGRADES.get(upgrade_id, {})
+	if upg.is_empty() or int(upg.get("required_age", 1)) > current_age:
+		return false
+	var prereq: String = upg.get("requires", "")
+	if prereq != "" and not has_upgrade(prereq):
+		return false
+	var cost: Dictionary = upgrade_cost(upgrade_id)
+	if not can_afford(cost):
+		return false
+	spend(cost)
+	var research_time: float = float(upg.get("research_time", 30.0))
+	research_queue.append({"kind": "upgrade", "id": upgrade_id, "time_left": research_time, "total_time": research_time})
+	return true
+
+
+## Called every frame by GameManager._process() for every player in the
+## match (this class is plain RefCounted, not a Node, so it can't tick
+## itself).
+func tick_research(delta: float) -> void:
+	if research_queue.is_empty():
+		return
+	var entry: Dictionary = research_queue[0]
+	entry["time_left"] = float(entry["time_left"]) - delta
+	research_queue[0] = entry
+	if entry["time_left"] <= 0.0:
+		research_queue.pop_front()
+		_complete_research(entry)
+
+
+func _complete_research(entry: Dictionary) -> void:
+	if entry["kind"] == "age":
+		current_age = int(entry["id"])
+	elif entry["kind"] == "upgrade":
+		var upgrade_id: String = entry["id"]
+		researched_upgrades.append(upgrade_id)
+		if upgrade_id == "forts_to_castles":
+			_convert_forts_to_castles()
+	tech_changed.emit()
+
+
+func _convert_forts_to_castles() -> void:
+	for b in buildings.duplicate():
+		if is_instance_valid(b) and b.building_type == "fort":
+			b.convert_to_castle()

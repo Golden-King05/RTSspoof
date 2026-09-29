@@ -13,6 +13,59 @@ const STARTING_RESOURCES := {
 
 const STARTING_POP_CAP := 5
 
+## Ages gate which buildings (and by extension, the units/upgrades locked
+## behind them) a player can construct -- see PlayerState.building_unlocked()
+## and GameManager's per-tick research queue. Age I has no advance_cost
+## since every match starts there already.
+const MAX_AGE := 4
+const AGES := {
+	1: {"display_name": "Age I: Dark Age", "advance_cost": {}, "advance_time": 0.0},
+	2: {"display_name": "Age II: Feudal Age", "advance_cost": {"food": 150, "wood": 80}, "advance_time": 20.0},
+	3: {"display_name": "Age III: Castle Age", "advance_cost": {"food": 400, "gold": 150}, "advance_time": 35.0},
+	4: {"display_name": "Age IV: Imperial Age", "advance_cost": {"food": 700, "gold": 350}, "advance_time": 45.0},
+}
+
+## Civ-wide research, all queued/researched at the Town Center (see
+## PlayerState.queue_upgrade/tick_research). `effect` is a flat bonus added
+## to every non-villager unit's effective_attack()/effective_armor().
+## `forts_to_castles` is a special case (see PlayerState.upgrade_cost() and
+## Building.convert_to_castle()): instead of a stat effect, it retroactively
+## converts every Fort a player owns into a Castle, and its cost scales with
+## how many Forts they already have -- see the module-level note in
+## PlayerState.gd for the exact formula.
+const UPGRADES := {
+	"iron_weapons": {
+		"display_name": "Iron Weapons",
+		"description": "+1 attack for all military units.",
+		"cost": {"food": 120, "gold": 80}, "research_time": 20.0,
+		"required_age": 3, "effect": {"attack": 1},
+	},
+	"reinforced_armor": {
+		"display_name": "Reinforced Armor",
+		"description": "+1 armor for all military units.",
+		"cost": {"gold": 100, "stone": 80}, "research_time": 20.0,
+		"required_age": 3, "effect": {"armor": 1},
+	},
+	"steel_weapons": {
+		"display_name": "Steel Weapons",
+		"description": "+1 more attack for all military units.",
+		"cost": {"food": 200, "gold": 150}, "research_time": 30.0,
+		"required_age": 4, "effect": {"attack": 1}, "requires": "iron_weapons",
+	},
+	"plate_armor": {
+		"display_name": "Plate Armor",
+		"description": "+1 more armor for all military units.",
+		"cost": {"gold": 180, "stone": 150}, "research_time": 30.0,
+		"required_age": 4, "effect": {"armor": 1}, "requires": "reinforced_armor",
+	},
+	"forts_to_castles": {
+		"display_name": "Forts -> Castles",
+		"description": "Upgrades every Fort into a Castle (more HP and a stronger attack) and switches future construction from Fort to Castle -- stone instead of wood from then on. Costs extra Stone for each Fort already built.",
+		"cost": {"gold": 300, "stone": 200}, "research_time": 40.0,
+		"required_age": 4, "is_building_upgrade": true,
+	},
+}
+
 ## Unit stat table. `civ_only` restricts a unit to a single civilization id.
 const UNIT_STATS := {
 	"villager": {
@@ -163,14 +216,50 @@ const BUILDING_STATS := {
 		"max_hp": 300, "cost": {"wood": 120}, "build_time": 35.0,
 		"provides_pop": 0, "can_train": ["militia", "archer"],
 		"drop_off_types": [], "radius": 40.0, "vision_range": 160.0,
-		"raid_resource": "wood",
+		"raid_resource": "wood", "required_age": 2,
 	},
 	"stable": {
 		"display_name": "Stable",
 		"max_hp": 280, "cost": {"wood": 140}, "build_time": 32.0,
 		"provides_pop": 0, "can_train": ["scout", "cavalry", "horse_archer"],
 		"drop_off_types": [], "radius": 40.0, "vision_range": 160.0,
-		"raid_resource": "wood",
+		"raid_resource": "wood", "required_age": 2,
+	},
+	## A defensive building, not trainable from -- it fires on its own at any
+	## enemy unit that wanders into attack_range (see Building._process_attack).
+	"tower": {
+		"display_name": "Watch Tower",
+		"max_hp": 250, "cost": {"wood": 50, "stone": 75}, "build_time": 25.0,
+		"provides_pop": 0, "can_train": [],
+		"drop_off_types": [], "radius": 26.0, "vision_range": 220.0,
+		"raid_resource": "stone", "required_age": 2,
+		"attack": 6, "attack_range": 160.0, "attack_cooldown": 1.2,
+	},
+	## Also auto-attacks like the Tower. Trains the basic infantry (Militia)
+	## plus this civ's Barracks-trained unique unit if it's melee (e.g. the
+	## Roman Legionary, not the ranged British Longbowman) -- see
+	## trainable_units_for_building(). Superseded by the Castle once
+	## "forts_to_castles" is researched: existing Forts convert in place
+	## (Building.convert_to_castle()) and new construction builds a Castle
+	## directly instead (obsoleted_by hides this from the build menu; see
+	## PlayerState.building_unlocked()).
+	"fort": {
+		"display_name": "Fort",
+		"max_hp": 400, "cost": {"wood": 200}, "build_time": 50.0,
+		"provides_pop": 0, "can_train": [],
+		"drop_off_types": [], "radius": 46.0, "vision_range": 200.0,
+		"raid_resource": "wood", "required_age": 3,
+		"attack": 10, "attack_range": 180.0, "attack_cooldown": 1.0,
+		"obsoleted_by": "forts_to_castles",
+	},
+	"castle": {
+		"display_name": "Castle",
+		"max_hp": 700, "cost": {"stone": 250}, "build_time": 70.0,
+		"provides_pop": 0, "can_train": [],
+		"drop_off_types": [], "radius": 52.0, "vision_range": 220.0,
+		"raid_resource": "stone", "required_age": 4,
+		"attack": 16, "attack_range": 200.0, "attack_cooldown": 0.9,
+		"requires_tech": "forts_to_castles",
 	},
 	"farm": {
 		"display_name": "Farm",
@@ -336,4 +425,14 @@ static func trainable_units_for_building(building_type: String, civ_id: String) 
 		var tc_unique: String = civ.get("town_center_unique", "")
 		if tc_unique != "" and not result.has(tc_unique):
 			result.append(tc_unique)
+	## Fort/Castle: the basic melee infantry plus this civ's Barracks-trained
+	## unique unit, but only if it's melee too -- a Fort trains foot soldiers,
+	## not archers, so a ranged unique like the British Longbowman stays
+	## Barracks-only.
+	if building_type == "fort" or building_type == "castle":
+		if not result.has("militia"):
+			result.append("militia")
+		if unique_unit != "" and civ.get("unique_unit_building", "barracks") == "barracks" and not result.has(unique_unit):
+			if not get_unit_stats(unique_unit).get("is_ranged", false):
+				result.append(unique_unit)
 	return result

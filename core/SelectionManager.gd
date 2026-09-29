@@ -47,6 +47,9 @@ func _world_mouse_pos() -> Vector2:
 func start_placement(building_type: String) -> void:
 	if not GameData.BUILDING_STATS.has(building_type):
 		return
+	var ps: PlayerState = GameManager.get_player(GameManager.HUMAN_ID)
+	if ps and not ps.building_unlocked(building_type):
+		return
 	build_mode = true
 	build_type = building_type
 	_ensure_ghost()
@@ -78,8 +81,9 @@ func _process(_delta: float) -> void:
 		_ghost.radius = stats.get("radius", 30.0)
 		var ps: PlayerState = GameManager.get_player(GameManager.HUMAN_ID)
 		var affordable: bool = ps.can_afford(stats.get("cost", {})) if ps else false
+		var unlocked: bool = ps.building_unlocked(build_type) if ps else false
 		var clear: bool = _is_location_clear(wp, _ghost.radius)
-		_ghost.valid = affordable and clear
+		_ghost.valid = affordable and unlocked and clear
 		_ghost.queue_redraw()
 
 

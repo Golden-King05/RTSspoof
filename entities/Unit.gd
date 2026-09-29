@@ -259,12 +259,21 @@ func _apply_death_debuff_to_nearby() -> void:
 			u.queue_redraw()
 
 
+## Civ-wide upgrades (see GameData.UPGRADES / PlayerState.upgrade_bonus)
+## apply to every combat unit except Villagers, who never fight.
+func _upgrade_bonus(stat: String) -> float:
+	if unit_type == "villager":
+		return 0.0
+	var ps: PlayerState = GameManager.get_player(player_id)
+	return ps.upgrade_bonus(stat) if ps else 0.0
+
+
 func effective_attack() -> float:
-	return max(0.0, float(attack) + aura_buff_attack + death_debuff_attack)
+	return max(0.0, float(attack) + aura_buff_attack + death_debuff_attack + _upgrade_bonus("attack"))
 
 
 func effective_armor() -> float:
-	return max(0.0, float(armor) + aura_buff_armor + death_debuff_armor)
+	return max(0.0, float(armor) + aura_buff_armor + death_debuff_armor + _upgrade_bonus("armor"))
 
 
 func effective_attack_cooldown() -> float:

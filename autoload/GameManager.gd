@@ -36,6 +36,17 @@ func start_match(player_configs: Array) -> void:
 	match_began.emit()
 
 
+## Ages and civ-wide upgrades research in real time (see PlayerState's
+## research_queue/tick_research()); PlayerState is plain RefCounted, not a
+## Node, so this autoload -- which already lives for the whole match -- is
+## what drives that clock for every player, human and AI alike.
+func _process(delta: float) -> void:
+	if not match_started or game_over:
+		return
+	for p in players:
+		p.tick_research(delta)
+
+
 func register_grid(tile_size: float, cells: Dictionary) -> void:
 	grid_tile_size = tile_size
 	water_cells = cells
